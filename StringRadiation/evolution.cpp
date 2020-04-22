@@ -19,7 +19,7 @@ using namespace std;
 const int nx = 201;
 const int ny = 201;
 const int nz = 51;
-const int nt = 1000;
+const int nt = 4000;
 const double dx = 0.7;
 const double dy = 0.7;
 const double dz = 0.7;
@@ -27,13 +27,16 @@ const double dt = 0.3;
 
 const bool makeGif = false;
 const int saveFreq = 10;
+const int countRate = 10;
+
+const string xyBC = "absorbing";
 
 
 int main(){
 
 	Array phi(2,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), bUpdate(2,nx,ny,nz,0.0), energydensity(nx,ny,nz,0.0);
-	int comp, i, j, k, TimeStep, gifFrame, tNow, tPast, s;
-    double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], phit[2], energy;
+	int comp, i, j, k, TimeStep, gifFrame, tNow, tPast, s, counter;
+    double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], phit[2], energy, phitx, phity;
 
 	struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -45,12 +48,14 @@ int main(){
     string icPath = dir_path + "/ic.txt";
     string finalFieldPath = dir_path + "/finalField.txt";
     string valsPerLoopPath = dir_path + "/valsPerLoop.txt";
-    string testPath = dir_path + "/test.txt";
+    string test1Path = dir_path + "/test1.txt";
+    string test2Path = dir_path + "/test2.txt";
 
     ifstream ic (icPath.c_str());
     ofstream finalField (finalFieldPath.c_str());
     ofstream valsPerLoop (valsPerLoopPath.c_str());
-    ofstream test (testPath.c_str());
+    ofstream test1 (test1Path.c_str());
+    ofstream test2 (test2Path.c_str());
 
     for(i=0;i<nx;i++){
         for(j=0;j<ny;j++){
@@ -110,12 +115,16 @@ int main(){
     //valsPerLoop << energy << endl;
 
     gifFrame = 0;
+    counter = 0;
 
     for(TimeStep=0;TimeStep<nt;TimeStep++){
 
-        if((1000*TimeStep)%(nt-1)==0){
+        //if((1000*TimeStep)%(nt-1)==0){
+        if(TimeStep>counter){
 
-            cout << "\rTimestep " << TimeStep << " completed." << flush;
+            cout << "\rTimestep " << TimeStep-1 << " completed." << flush;
+
+            counter += countRate;
 
         }
 
@@ -126,28 +135,32 @@ int main(){
 
         // Sets Neumann boundary conditions on x and y as simple first attempt. Will need to use absorbing boundary conditions in future. z direction has periodic boundary conditions instead.
 
-        for(i=1;i<nx-1;i++){
-            for(k=1;k<nz-1;k++){
+        if(xyBC=="neumann"){
 
-                phi(0,tNow,i,0,k) = phi(0,tNow,i,1,k);
-                phi(1,tNow,i,0,k) = phi(1,tNow,i,1,k);
+            for(i=1;i<nx-1;i++){
+                for(k=1;k<nz-1;k++){
 
-                phi(0,tNow,i,ny-1,k) = phi(0,tNow,i,ny-2,k);
-                phi(1,tNow,i,ny-1,k) = phi(1,tNow,i,ny-2,k);
+                    phi(0,tNow,i,0,k) = phi(0,tNow,i,1,k);
+                    phi(1,tNow,i,0,k) = phi(1,tNow,i,1,k);
 
+                    phi(0,tNow,i,ny-1,k) = phi(0,tNow,i,ny-2,k);
+                    phi(1,tNow,i,ny-1,k) = phi(1,tNow,i,ny-2,k);
+
+                }
             }
-        }
 
-        for(j=0;j<ny;j++){
-            for(k=1;k<nz-1;k++){
+            for(j=0;j<ny;j++){
+                for(k=1;k<nz-1;k++){
 
-                phi(0,tNow,0,j,k) = phi(0,tNow,1,j,k);
-                phi(1,tNow,0,j,k) = phi(1,tNow,1,j,k);
+                    phi(0,tNow,0,j,k) = phi(0,tNow,1,j,k);
+                    phi(1,tNow,0,j,k) = phi(1,tNow,1,j,k);
 
-                phi(0,tNow,nx-1,j,k) = phi(0,tNow,nx-2,j,k);
-                phi(1,tNow,nx-1,j,k) = phi(1,tNow,nx-2,j,k);
+                    phi(0,tNow,nx-1,j,k) = phi(0,tNow,nx-2,j,k);
+                    phi(1,tNow,nx-1,j,k) = phi(1,tNow,nx-2,j,k);
 
+                }
             }
+
         }
 
 
@@ -254,270 +267,368 @@ int main(){
             }
         }
 
-        // Set absorbing boundary conditions (for next time step)
+        //////////////////////////////////////////////////////////////////////////////////////////
+        //                            Absorbing boundary conditions
+        //////////////////////////////////////////////////////////////////////////////////////////
 
-       // Set along x boundary (so that absorbing condition is true at grid point neighbouring the boundary)
-       
+        if(xyBC=="absorbing"){
 
-        // for(j=1;j<ny-1;j++){
-        //     for(k=0;k<nz;k++){
-        //         for(comp=0;comp<2;comp++){
+            // Set along x boundary
 
-        //             // left x boundary
+            // for(j=1;j<ny-1;j++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
 
-        //             phiyy = ( phi(comp,tNow,1,j+1,k) - 2*phi(comp,tNow,1,j,k) + phi(comp,tNow,1,j-1,k) )/(dy*dy);
+            //             // Using points next to boundary to satisfy condition
 
-        //             if(k==0){
+            //             // x<0 boundary
 
-        //                 phizz = ( phi(comp,tNow,1,j,k+1) - 2*phi(comp,tNow,1,j,k) + phi(comp,tNow,1,j,nz-1) )/(dz*dz);
+            //             phiyy = ( phi(comp,tNow,1,j+1,k) - 2*phi(comp,tNow,1,j,k) + phi(comp,tNow,1,j-1,k) )/(dy*dy);
+            //             phizz = ( phi(comp,tNow,1,j,k+1) - 2*phi(comp,tNow,1,j,k) + phi(comp,tNow,1,j,k-1) )/(dz*dz);
 
-        //             } else if(k==nz-1){
+            //             bUpdate(comp,0,j,k) = phi(comp,tPast,0,j,k) + 2*phi(comp,tNow,2,j,k) - 2*phi(comp,tPast,2,j,k) + dt*dt*phitt(comp,2,j,k)
+            //                                 - 4*dt*dx*( -phitt(comp,1,j,k) + 0.5*(phiyy + phizz) );
 
-        //                 phizz = ( phi(comp,tNow,1,j,0) - 2*phi(comp,tNow,1,j,k) + phi(comp,tNow,1,j,k-1) )/(dz*dz);
+            //             // x>0 boundary
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,1,j,k+1) - 2*phi(comp,tNow,1,j,k) + phi(comp,tNow,1,j,k-1) )/(dz*dz);
+            //             phiyy = ( phi(comp,tNow,nx-2,j+1,k) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j-1,k) )/(dy*dy);
+            //             phizz = ( phi(comp,tNow,nx-2,j,k+1) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j,k-1) )/(dz*dz);
 
-        //             }
+            //             bUpdate(comp,nx-1,j,k) = phi(comp,tPast,nx-1,j,k) + 2*phi(comp,tNow,nx-3,j,k) - 2*phi(comp,tPast,nx-3,j,k) + dt*dt*phitt(comp,nx-3,j,k)
+            //                                    - 4*dt*dx*( -phitt(comp,nx-2,j,k) + 0.5*(phiyy + phizz) );
 
-        //             bUpdate(comp,0,j,k) = 2*phi(comp,tNow,2,j,k) - 2*phi(comp,tPast,2,j,k) + dt*dt*phitt(comp,2,j,k) + phi(comp,tPast,0,j,k)
-        //                                 - 4*dt*dx*( phitt(comp,1,j,k) - 0.5*(phiyy + phizz) );
+            //         }
+            //     }
+            // }
 
-        //             // right x boundary
+            // // Set along y boundary
 
-        //             phiyy = ( phi(comp,tNow,nx-2,j+1,k) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j-1,k) )/(dy*dy);
+            // for(i=1;i<nx-1;i++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
 
-        //             if(k==0){
+            //             // Using points next to boundary again
 
-        //                 phizz = ( phi(comp,tNow,nx-2,j,k+1) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j,nz-1) )/(dz*dz);
+            //             // y<0 boundary
 
-        //             } else if(k==nz-1){
+            //             phixx = ( phi(comp,tNow,i+1,1,k) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i-1,1,k) )/(dx*dx);
+            //             phizz = ( phi(comp,tNow,i,1,k+1) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i,1,k-1) )/(dz*dz);
 
-        //                 phizz = ( phi(comp,tNow,nx-2,j,0) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j,k-1) )/(dz*dz);
+            //             bUpdate(comp,i,0,k) = phi(comp,tPast,i,0,k) + 2*phi(comp,tNow,i,2,k) - 2*phi(comp,tPast,i,2,k) + dt*dt*phitt(comp,i,2,k)
+            //                                 - 4*dt*dy*( -phitt(comp,i,1,k) + 0.5*(phixx + phizz) );
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,nx-2,j,k+1) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j,k-1) )/(dz*dz);
+            //             // y>0 boundary
 
-        //             }
+            //             phixx = ( phi(comp,tNow,i+1,ny-2,k) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i-1,ny-2,k) )/(dx*dx);
+            //             phizz = ( phi(comp,tNow,i,ny-2,k+1) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i,ny-2,k-1) )/(dz*dz);
 
-        //             bUpdate(comp,nx-1,j,k) = 2*phi(comp,tNow,nx-3,j,k) - 2*phi(comp,tPast,nx-3,j,k) + dt*dt*phitt(comp,nx-3,j,k) + phi(comp,tPast,nx-1,j,k)
-        //                                    + 4*dt*dx*( phitt(comp,nx-2,j,k) - 0.5*(phiyy + phizz) );
+            //             bUpdate(comp,i,ny-1,k) = phi(comp,tPast,i,ny-1,k) + 2*phi(comp,tNow,i,ny-3,k) - 2*phi(comp,tPast,i,ny-3,k) + dt*dt*phitt(comp,i,ny-3,k)
+            //                                    - 4*dt*dy*( -phitt(comp,i,ny-2,k) + 0.5*(phixx + phizz) );
 
+            //         }
+            //     }
+            // }
 
-            
-        //         }
-        //     }
-        // } 
 
-        // // Set along y boundary
+            // // Now need to update the boundary values. Corners have been ignored because they don't have any impact on dynamics with this method
 
+            // for(j=1;j<ny-1;j++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
 
-        // for(i=1;i<nx-1;i++){
-        //     for(k=0;k<nz;k++){
-        //         for(comp=0;comp<2;comp++){
+            //             phi(comp,tPast,0,j,k) = bUpdate(comp,0,j,k);
+            //             phi(comp,tPast,nx-1,j,k) = bUpdate(comp,nx-1,j,k);
 
-        //             // lower y boundary
+            //         }
+            //     }
+            // }
 
-        //             phixx = ( phi(comp,tNow,i+1,1,k) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i-1,1,k) )/(dx*dx);
+            // for(i=1;i<nx-1;i++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
 
-        //             if(k==0){
+            //             phi(comp,tPast,i,0,k) = bUpdate(comp,i,0,k);
+            //             phi(comp,tPast,i,ny-1,k) = bUpdate(comp,i,ny-1,k);
 
-        //                 phizz = ( phi(comp,tNow,i,1,k+1) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i,1,nz-1) )/(dz*dz);
+            //         }
+            //     }
+            // }
 
-        //             } else if(k==nz-1){
+            // x boundary
 
-        //                 phizz = ( phi(comp,tNow,i,1,0) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i,1,k-1) )/(dz*dz);
+            for(j=1;j<ny-1;j++){
+                for(k=1;k<nz-1;k++){
+                    for(comp=0;comp<2;comp++){
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,i,1,k+1) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i,1,k-1) )/(dz*dz);
+                        // x<0 boundary
 
-        //             }
+                        phiyy = ( phi(comp,tNow,0,j+1,k) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j-1,k) )/(dy*dy);
+                        phizz = ( phi(comp,tNow,0,j,k+1) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j,k-1) )/(dz*dz);
 
-        //             bUpdate(comp,i,0,k) = 2*phi(comp,tNow,i,2,k) - 2*phi(comp,tPast,i,2,k) + dt*dt*phitt(comp,i,2,k) + phi(comp,tPast,i,0,k)
-        //                                 - 4*dt*dy*( phitt(comp,i,1,k) - 0.5*(phixx + phizz) );
+                        phitx = ( phi(comp,tNow,1,j,k) - phi(comp,tNow,0,j,k) - phi(comp,tPast,1,j,k) + phi(comp,tPast,0,j,k) )/(dt*dx);
 
-        //             // upper y boundary
+                        phitt(comp,0,j,k) = phitx + 0.5*(phiyy + phizz);
 
-        //             phixx = ( phi(comp,tNow,i+1,ny-2,k) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i-1,ny-2,k) )/(dx*dx);
+                        // x>0 boundary
 
-        //             if(k==0){
+                        phiyy = ( phi(comp,tNow,nx-1,j+1,k) - 2*phi(comp,tNow,nx-1,j,k) + phi(comp,tNow,nx-1,j-1,k) )/(dy*dy);
+                        phizz = ( phi(comp,tNow,nx-1,j,k+1) - 2*phi(comp,tNow,nx-1,j,k) + phi(comp,tNow,nx-1,j,k-1) )/(dz*dz);
 
-        //                 phizz = ( phi(comp,tNow,i,ny-2,k+1) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i,ny-2,nz-1) )/(dz*dz);
+                        phitx = ( phi(comp,tNow,nx-1,j,k) - phi(comp,tNow,nx-2,j,k) - phi(comp,tPast,nx-1,j,k) + phi(comp,tPast,nx-2,j,k) )/(dt*dx);
 
-        //             } else if(k==nz-1){
+                        phitt(comp,nx-1,j,k) = -phitx + 0.5*(phiyy + phizz);
 
-        //                 phizz = ( phi(comp,tNow,i,ny-2,0) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i,ny-2,k-1) )/(dz*dz);
+                    }
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,i,ny-2,k+1) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i,ny-2,k-1) )/(dz*dz);
+                    if(TimeStep==nt-1){test1 << phitt(0,0,j,k) << " " << phitt(1,0,j,k) << " " << phitt(0,nx-1,j,k) << " " << phitt(1,nx-1,j,k) << endl;}
 
-        //             }
+                }
+            }
 
-        //             bUpdate(comp,i,ny-1,k) = 2*phi(comp,tNow,i,ny-3,k) - 2*phi(comp,tPast,i,ny-3,k) + dt*dt*phitt(comp,i,ny-3,k) + phi(comp,tPast,i,ny-1,k)
-        //                                    + 4*dt*dy*( phitt(comp,i,ny-2,k) - 0.5*(phixx + phizz) );
+            // Set along y boundary
 
-                
-        //         }
-        //     }
+            for(i=1;i<nx-1;i++){
+                for(k=1;k<nz-1;k++){
+                    for(comp=0;comp<2;comp++){
 
-        // }
+                        // y<0 boundary
 
+                        phixx = ( phi(comp,tNow,i+1,0,k) - 2*phi(comp,tNow,i,0,k) + phi(comp,tNow,i-1,0,k) )/(dx*dx);
+                        phizz = ( phi(comp,tNow,i,0,k+1) - 2*phi(comp,tNow,i,0,k) + phi(comp,tNow,i,0,k-1) )/(dz*dz);
 
-        // Absorbing boundary conditions so that equation is satisfied at the boundary.
+                        phity = ( phi(comp,tNow,i,1,k) - phi(comp,tNow,i,0,k) - phi(comp,tPast,i,1,k) + phi(comp,tPast,i,0,k) )/(dt*dy);
 
-        // for(j=1;j<ny-1;j++){
-        //     for(k=0;k<nz;k++){
-        //         for(comp=0;comp<2;comp++){
+                        phitt(comp,i,0,k) = phity + 0.5*(phixx + phizz);
 
-        //             // left x boundary
 
-        //             phiyy = ( phi(comp,tNow,0,j+1,k) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j-1,k) )/(dy*dy);
+                        // y>0 boundary
 
-        //             if(k==0){
+                        phixx = ( phi(comp,tNow,i+1,ny-1,k) - 2*phi(comp,tNow,i,ny-1,k) + phi(comp,tNow,i-1,ny-1,k) )/(dx*dx);
+                        phizz = ( phi(comp,tNow,i,ny-1,k+1) - 2*phi(comp,tNow,i,ny-1,k) + phi(comp,tNow,i,ny-1,k-1) )/(dz*dz);
 
-        //                 phizz = ( phi(comp,tNow,0,j,k+1) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j,nz-1) )/(dz*dz);
+                        phity = ( phi(comp,tNow,i,ny-1,k) - phi(comp,tNow,i,ny-2,k) - phi(comp,tPast,i,ny-1,k) + phi(comp,tPast,i,ny-2,k) )/(dt*dy);
 
-        //             } else if(k==nz-1){
+                        phitt(comp,i,ny-1,k) = -phity + 0.5*(phixx + phizz);
 
-        //                 phizz = ( phi(comp,tNow,0,j,0) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j,k-1) )/(dz*dz);
+                    }
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,0,j,k+1) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j,k-1) )/(dz*dz);
+                    if(TimeStep==nt-1){test2 << phitt(0,i,0,k) << " " << phitt(1,i,0,k) << " " << phitt(0,i,ny-1,k) << " " << phitt(1,i,ny-1,k) << endl;}
 
-        //             }
+                }
+            }
 
-        //             bUpdate(comp,0,j,k) = 2*phi(comp,tNow,2,j,k) - 2*phi(comp,tPast,2,j,k) + dt*dt*phitt(comp,2,j,k) + phi(comp,tPast,0,j,k)
-        //                                 - 4*dt*dx*( phitt(comp,1,j,k) - 0.5*(phiyy + phizz) );
+            // Assign corners. Calculated by adding both absorbing both condition equations and subtracting 1/2 times the wave equation
 
-        //             // right x boundary
+            for(k=1;k<nz-1;k++){
+                for(comp=0;comp<2;comp++){
 
-        //             phiyy = ( phi(comp,tNow,nx-2,j+1,k) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j-1,k) )/(dy*dy);
+                    // x,y<0 corner
 
-        //             if(k==0){
+                    phizz = ( phi(comp,tNow,0,0,k+1) - 2*phi(comp,tNow,0,0,k) + phi(comp,tNow,0,0,k-1) )/(dz*dz);
 
-        //                 phizz = ( phi(comp,tNow,nx-2,j,k+1) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j,nz-1) )/(dz*dz);
+                    phitx = ( phi(comp,tNow,1,0,k) - phi(comp,tNow,0,0,k) - phi(comp,tPast,1,0,k) + phi(comp,tPast,0,0,k) )/(dt*dx);
+                    phity = ( phi(comp,tNow,0,1,k) - phi(comp,tNow,0,0,k) - phi(comp,tPast,0,1,k) + phi(comp,tPast,0,0,k) )/(dt*dy);
 
-        //             } else if(k==nz-1){
+                    phitt(comp,0,0,k) = ( phizz + 2*(phitx + phity) )/3;
 
-        //                 phizz = ( phi(comp,tNow,nx-2,j,0) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j,k-1) )/(dz*dz);
+                    // x<0,y>0 corner
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,nx-2,j,k+1) - 2*phi(comp,tNow,nx-2,j,k) + phi(comp,tNow,nx-2,j,k-1) )/(dz*dz);
+                    phizz = ( phi(comp,tNow,0,ny-1,k+1) - 2*phi(comp,tNow,0,ny-1,k) + phi(comp,tNow,0,ny-1,k-1) )/(dz*dz);
 
-        //             }
+                    phitx = ( phi(comp,tNow,1,ny-1,k) - phi(comp,tNow,0,ny-1,k) - phi(comp,tPast,1,ny-1,k) + phi(comp,tPast,0,ny-1,k) )/(dt*dx);
+                    phity = ( phi(comp,tNow,0,ny-1,k) - phi(comp,tNow,0,ny-2,k) - phi(comp,tPast,0,ny-1,k) + phi(comp,tPast,0,ny-2,k) )/(dt*dy);
 
-        //             bUpdate(comp,nx-1,j,k) = 2*phi(comp,tNow,nx-3,j,k) - 2*phi(comp,tPast,nx-3,j,k) + dt*dt*phitt(comp,nx-3,j,k) + phi(comp,tPast,nx-1,j,k)
-        //                                    + 4*dt*dx*( phitt(comp,nx-2,j,k) - 0.5*(phiyy + phizz) );
+                    phitt(comp,0,ny-1,k) = ( phizz + 2*(phitx - phity) )/3;
 
+                    // x>0,y<0 corner
 
-            
-        //         }
-        //     }
-        // } 
+                    phizz = ( phi(comp,tNow,nx-1,0,k+1) - 2*phi(comp,tNow,nx-1,0,k) + phi(comp,tNow,nx-1,0,k-1) )/(dz*dz);
 
-        // // Set along y boundary
+                    phitx = ( phi(comp,tNow,nx-1,0,k) - phi(comp,tNow,nx-2,0,k) - phi(comp,tPast,nx-1,0,k) + phi(comp,tPast,nx-2,0,k) )/(dt*dx);
+                    phity = ( phi(comp,tNow,nx-1,1,k) - phi(comp,tNow,nx-1,0,k) - phi(comp,tPast,nx-1,1,k) + phi(comp,tPast,nx-1,0,k) )/(dt*dy);
 
+                    phitt(comp,nx-1,0,k) = ( phizz - 2*(phitx - phity) )/3;
 
-        // for(i=1;i<nx-1;i++){
-        //     for(k=0;k<nz;k++){
-        //         for(comp=0;comp<2;comp++){
+                    // x,y>0 corner
 
-        //             // lower y boundary
+                    phizz = ( phi(comp,tNow,nx-1,ny-1,k+1) - 2*phi(comp,tNow,nx-1,ny-1,k) + phi(comp,tNow,nx-1,ny-1,k-1) )/(dz*dz);
 
-        //             phixx = ( phi(comp,tNow,i+1,1,k) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i-1,1,k) )/(dx*dx);
+                    phitx = ( phi(comp,tNow,nx-1,ny-1,k) - phi(comp,tNow,nx-2,ny-1,k) - phi(comp,tPast,nx-1,ny-1,k) + phi(comp,tPast,nx-2,ny-1,k) )/(dt*dx);
+                    phity = ( phi(comp,tNow,nx-1,ny-1,k) - phi(comp,tNow,nx-1,ny-2,k) - phi(comp,tPast,nx-1,ny-1,k) + phi(comp,tPast,nx-1,ny-2,k) )/(dt*dy);
 
-        //             if(k==0){
+                    phitt(comp,nx-1,ny-1,k) = ( phizz - 2*(phitx + phity) )/3;
 
-        //                 phizz = ( phi(comp,tNow,i,1,k+1) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i,1,nz-1) )/(dz*dz);
+                }
+            }
 
-        //             } else if(k==nz-1){
 
-        //                 phizz = ( phi(comp,tNow,i,1,0) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i,1,k-1) )/(dz*dz);
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,i,1,k+1) - 2*phi(comp,tNow,i,1,k) + phi(comp,tNow,i,1,k-1) )/(dz*dz);
+            // Set along x boundary
 
-        //             }
+            // for(j=1;j<ny-1;j++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
 
-        //             bUpdate(comp,i,0,k) = 2*phi(comp,tNow,i,2,k) - 2*phi(comp,tPast,i,2,k) + dt*dt*phitt(comp,i,2,k) + phi(comp,tPast,i,0,k)
-        //                                 - 4*dt*dy*( phitt(comp,i,1,k) - 0.5*(phixx + phizz) );
+            //             // x<0 boundary
 
-        //             // upper y boundary
+            //             phiyy = ( phi(comp,tNow,0,j+1,k) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j-1,k) )/(dy*dy);
+            //             phizz = ( phi(comp,tNow,0,j,k+1) - 2*phi(comp,tNow,0,j,k) + phi(comp,tNow,0,j,k-1) )/(dz*dz);
 
-        //             phixx = ( phi(comp,tNow,i+1,ny-2,k) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i-1,ny-2,k) )/(dx*dx);
+            //             bUpdate(comp,0,j,k) = ( dt*( 2*phi(comp,tNow,1,j,k) - 2*phi(comp,tPast,1,j,k) + dt*dt*phitt(comp,1,j,k) + phi(comp,tPast,0,j,k) )
+            //                                 + 2*dx*( 2*phi(comp,tNow,0,j,k) - phi(comp,tPast,0,j,k) ) + dt*dt*dx*( phiyy + phizz ) )/(dt + 2*dx);
 
-        //             if(k==0){
+            //             // x>0 boundary
 
-        //                 phizz = ( phi(comp,tNow,i,ny-2,k+1) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i,ny-2,nz-1) )/(dz*dz);
+            //             phiyy = ( phi(comp,tNow,nx-1,j+1,k) - 2*phi(comp,tNow,nx-1,j,k) + phi(comp,tNow,nx-1,j-1,k) )/(dy*dy);
+            //             phizz = ( phi(comp,tNow,nx-1,j,k+1) - 2*phi(comp,tNow,nx-1,j,k) + phi(comp,tNow,nx-1,j,k-1) )/(dz*dz);
 
-        //             } else if(k==nz-1){
+            //             bUpdate(comp,nx-1,j,k) = ( dt*( 2*phi(comp,tNow,nx-2,j,k) - 2*phi(comp,tPast,nx-2,j,k) + dt*dt*phitt(comp,nx-2,j,k) + phi(comp,tPast,nx-1,j,k) )
+            //                                    - 2*dx*( 2*phi(comp,tNow,nx-1,j,k) - phi(comp,tPast,nx-1,j,k) ) - dt*dt*dx*( phiyy + phizz ) )/(dt - 2*dx);
 
-        //                 phizz = ( phi(comp,tNow,i,ny-2,0) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i,ny-2,k-1) )/(dz*dz);
+            //         }
+            //     }
+            // }
 
-        //             } else{
-                        
-        //                 phizz = ( phi(comp,tNow,i,ny-2,k+1) - 2*phi(comp,tNow,i,ny-2,k) + phi(comp,tNow,i,ny-2,k-1) )/(dz*dz);
+            // // Set along y boundary with conditions for corners
 
-        //             }
+            // for(i=0;i<nx;i++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
 
-        //             bUpdate(comp,i,ny-1,k) = 2*phi(comp,tNow,i,ny-3,k) - 2*phi(comp,tPast,i,ny-3,k) + dt*dt*phitt(comp,i,ny-3,k) + phi(comp,tPast,i,ny-1,k)
-        //                                    + 4*dt*dy*( phitt(comp,i,ny-2,k) - 0.5*(phixx + phizz) );
+            //             // y < 0 boundary
 
-                
-        //         }
-        //     }
+            //             phizz = ( phi(comp,tNow,i,0,k+1) - 2*phi(comp,tNow,i,0,k) + phi(comp,tNow,i,0,k-1) )/(dz*dz);
 
-        // }
+            //             if(i==0){
 
-        // // Now update the boundary values
+            //                 phixx = ( phi(comp,tNow,i+2,0,k) - 2*phi(comp,tNow,i+1,0,k) + phi(comp,tNow,i,0,k) )/(dx*dx);
 
-        // for(i=0;i<nx;i=i+nx-1){
-        //     for(j=1;j<ny-1;j++){
-        //         for(k=0;k<nz;k++){
-        //             for(comp=0;comp<2;comp++){
+            //                 bUpdate(comp,i,0,k) = ( dt*( bUpdate(comp,i,1,k) - phi(comp,tPast,i,1,k) + phi(comp,tPast,i,0,k) ) + 2*dx*( 2*phi(comp,tNow,i,0,k) - phi(comp,tPast,i,0,k) )
+            //                                     + dt*dt*dx*( phixx + phizz ) )/(dt + 2*dx);
 
-        //                 phi(comp,tPast,i,j,k) = bUpdate(comp,i,j,k);
+            //             } else if(i==nx-1){
 
-        //             }
-        //         }
-        //     }
-        // }
+            //                 phixx = ( phi(comp,tNow,i,0,k) - 2*phi(comp,tNow,i-1,0,k) + phi(comp,tNow,i-2,0,k) )/(dx*dx);
 
-        // for(i=1;i<nx-1;i++){
-        //     for(j=0;j<ny;j=j+ny-1){
-        //         for(k=0;k<nz;k++){
-        //             for(comp=0;comp<2;comp++){
+            //                 // Same update as above but different for non-boundary terms
+            //                 bUpdate(comp,i,0,k) = ( dt*( bUpdate(comp,i,1,k) - phi(comp,tPast,i,1,k) + phi(comp,tPast,i,0,k) ) + 2*dx*( 2*phi(comp,tNow,i,0,k) - phi(comp,tPast,i,0,k) )
+            //                                     + dt*dt*dx*( phixx + phizz ) )/(dt + 2*dx);
 
-        //                 phi(comp,tPast,i,j,k) = bUpdate(comp,i,j,k);
+            //             } else{
 
-        //             }
-        //         }
-        //     }
-        // }
+            //                 phixx = ( phi(comp,tNow,i+1,0,k) - 2*phi(comp,tNow,i,0,k) + phi(comp,tNow,i-1,0,k) )/(dx*dx);
 
-        // May need to do this for the corner points too but I don't think they are actually ever used.
+            //                 bUpdate(comp,i,0,k) = ( dt*( 2*phi(comp,tNow,i,1,k) - 2*phi(comp,tPast,i,1,k) + dt*dt*phitt(comp,i,1,k) + phi(comp,tPast,i,0,k) )
+            //                                     + 2*dx*( 2*phi(comp,tNow,i,0,k) - phi(comp,tPast,i,0,k) ) + dt*dt*dx*( phixx + phizz ) )/(dt + 2*dx);
+
+            //             }
+
+            //             // y > 0 boundary
+
+            //             phizz = ( phi(comp,tNow,i,ny-1,k+1) - 2*phi(comp,tNow,i,ny-1,k) + phi(comp,tNow,i,ny-1,k-1) )/(dz*dz);
+
+            //             if(i==0){
+
+            //                 phixx = ( phi(comp,tNow,i+2,ny-1,k) - 2*phi(comp,tNow,i+1,ny-1,k) + phi(comp,tNow,i,ny-1,k) )/(dx*dx);
+
+            //                 bUpdate(comp,i,ny-1,k) = ( dt*( bUpdate(comp,i,ny-2,k) - phi(comp,tPast,i,ny-2,k) + phi(comp,tPast,i,ny-1,k) ) - 2*dx*( 2*phi(comp,tNow,i,ny-1,k) - phi(comp,tPast,i,ny-1,k) )
+            //                                        - dt*dt*dx*( phixx + phizz ) )/(dt - 2*dx);
+
+            //             } else if(i==nx-1){
+
+            //                 phixx = ( phi(comp,tNow,i,ny-1,k) - 2*phi(comp,tNow,i-1,ny-1,k) + phi(comp,tNow,i-2,ny-1,k) )/(dx*dx);
+
+            //                 bUpdate(comp,i,ny-1,k) = ( dt*( bUpdate(comp,i,ny-2,k) - phi(comp,tPast,i,ny-2,k) + phi(comp,tPast,i,ny-1,k) ) - 2*dx*( 2*phi(comp,tNow,i,ny-1,k) - phi(comp,tPast,i,ny-1,k) )
+            //                                        - dt*dt*dx*( phixx + phizz ) )/(dt - 2*dx);
+
+            //             } else{
+
+            //                 phixx = ( phi(comp,tNow,i+1,ny-1,k) - 2*phi(comp,tNow,i,ny-1,k) + phi(comp,tNow,i-1,ny-1,k) )/(dx*dx);
+
+            //                 bUpdate(comp,i,ny-1,k) = ( dt*( 2*phi(comp,tNow,i,ny-2,k) - 2*phi(comp,tPast,i,ny-2,k) + dt*dt*phitt(comp,i,ny-2,k) + phi(comp,tPast,i,ny-1,k) )
+            //                                        - 2*dx*( 2*phi(comp,tNow,i,ny-1,k) - phi(comp,tPast,i,ny-1,k) ) - dt*dt*dx*( phixx + phizz ) )/(dt - 2*dx);
+
+            //             }
+
+            //         }
+            //     }
+            // }
+
+
+
+            // // Now need to update the boundary values
+
+            // for(j=1;j<ny-1;j++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
+
+            //             phi(comp,tPast,0,j,k) = bUpdate(comp,0,j,k);
+            //             phi(comp,tPast,nx-1,j,k) = bUpdate(comp,nx-1,j,k);
+
+            //         }
+            //     }
+            // }
+
+            // for(i=0;i<nx;i++){
+            //     for(k=1;k<nz-1;k++){
+            //         for(comp=0;comp<2;comp++){
+
+            //             phi(comp,tPast,i,0,k) = bUpdate(comp,i,0,k);
+            //             phi(comp,tPast,i,ny-1,k) = bUpdate(comp,i,ny-1,k);
+
+            //         }
+            //     }
+            // }
+
+        }
+
 
 
         // Update the array
 
-        #pragma omp parallel for default(none) shared(phi,phitt,tNow,tPast) private(j,k,comp)
-        for(i=1;i<nx-1;i++){
-            for(j=1;j<ny-1;j++){
-                for(k=0;k<nz;k++){
-                    for(comp=0;comp<2;comp++){
+        // #pragma omp parallel for default(none) shared(phi,phitt,tNow,tPast) private(j,k,comp)
+        // for(i=1;i<nx-1;i++){
+        //     for(j=1;j<ny-1;j++){
+        //         for(k=1;k<nz-1;k++){
+        //             for(comp=0;comp<2;comp++){
 
-                        phi(comp,tPast,i,j,k) = 2*phi(comp,tNow,i,j,k) - phi(comp,tPast,i,j,k) + dt*dt*phitt(comp,i,j,k);
+        //                 phi(comp,tPast,i,j,k) = 2*phi(comp,tNow,i,j,k) - phi(comp,tPast,i,j,k) + dt*dt*phitt(comp,i,j,k);
 
+        //             }
+        //         }
+        //     }
+        // }
+
+        if(xyBC == "absorbing"){
+
+            #pragma omp parallel for default(none) shared(phi,phitt,tNow,tPast) private(j,k,comp)
+            for(i=0;i<nx;i++){
+                for(j=0;j<ny;j++){
+                    for(k=1;k<nz-1;k++){
+                        for(comp=0;comp<2;comp++){
+
+                            phi(comp,tPast,i,j,k) = 2*phi(comp,tNow,i,j,k) - phi(comp,tPast,i,j,k) + dt*dt*phitt(comp,i,j,k);
+
+                        }
                     }
                 }
             }
+
+        } else{
+
+            #pragma omp parallel for default(none) shared(phi,phitt,tNow,tPast) private(j,k,comp)
+            for(i=1;i<nx-1;i++){
+                for(j=1;j<ny-1;j++){
+                    for(k=1;k<nz-1;k++){
+                        for(comp=0;comp<2;comp++){
+
+                            phi(comp,tPast,i,j,k) = 2*phi(comp,tNow,i,j,k) - phi(comp,tPast,i,j,k) + dt*dt*phitt(comp,i,j,k);
+
+                        }
+                    }
+                }
+            }
+
         }
 
 
@@ -555,14 +666,6 @@ int main(){
                 finalField << phi(0,tPast,i,j,k) << " " << phi(1,tPast,i,j,k) << endl;
 
             }
-        }
-    }
-
-    for(j=0;j<ny;j++){
-        for(k=0;k<nz;k++){
-
-            test << phi(0,tPast,0,j,k) << " " << phi(1,tPast,0,j,k) << endl;
-
         }
     }
 

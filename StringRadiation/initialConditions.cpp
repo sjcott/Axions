@@ -80,7 +80,7 @@ const double SORa = 0.001;
 
 const double tol = 1e-6;
 
-const double eps = 0.126;
+const double eps = 0.01;
 const double lambda = dz*(nz-1)/(1-0.25*eps*eps);
 
 const double pi = 4*atan(1);
@@ -349,7 +349,7 @@ int main(){
 
      			} else{
 
-     				phi(1,i,j,k) = -phiMag*y/sqrt(pow(normal_dist,2)+y*y);
+     				phi(1,i,j,k) = phiMag*y/sqrt(pow(normal_dist,2)+y*y);
 
      			}
 
@@ -362,8 +362,8 @@ int main(){
 
      			// }
 
-     			phi(0,i,j,nz-k) = phi(0,i,j,k);
-     			phi(1,i,j,nz-k) = phi(1,i,j,k);
+     			phi(0,i,j,nz-1-k) = phi(0,i,j,k);
+     			phi(1,i,j,nz-1-k) = phi(1,i,j,k);
 
     		}
 
