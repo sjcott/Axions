@@ -10,7 +10,7 @@ class Array{
         Array(int,int,double); //Constructor for 2d arrays
         Array(int,double); //Constructor for 1d arrays
 
-        int A, B, C, D, E; // Sizes of each dimension
+        int A, B, C, D, E, dim; // Sizes of each dimension and #dimensions of the array (for indexing error messages)
         std::vector<double> array; //Empty vector container for the array
 
         double& operator()(int a, int b, int c, int d, int e); // Overloads operator to allow easy indexing of 5d arrays

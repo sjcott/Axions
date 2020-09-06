@@ -75,22 +75,32 @@ const double dx = 0.7;
 const double dy = 0.7;
 const double dz = 0.7;
 
-const int SORnx = 1000001;
-const double SORa = 0.001;
+const int n = 1;
+const int m = 1; // m and n are useful for now, code assumes they are both 1.
+const int q1 = 2;
+const int q2 = q1 - 1;
+
+const double eta1 = 1;
+const double eta2 = 1;
+const double lambda1 = 2;
+const double g = sqrt(0.5*lambda1*pow(eta1,2)/(q1*q1 + q2*q2)); // Specific choice that sets all masses equal (assuming m1=m2)
+
+const int SORnx = 20001;
+const double SORa = 0.01;
 
 const double tol = 1e-6;
 
-const double eps = 0.01;
-const double lambda = dz*(nz-1)/(1-0.25*eps*eps);
+const double eps = 0.1;
+const double lambda = dz*(nz-1)/(1-0.25*eps*eps); // This essentially wavelength of sine string (not related to model parameters)
 
 const double pi = 4*atan(1);
 const double gr = 0.5*(1+sqrt(5));
 
 int main(){
 
-	Array phi(2,nx,ny,nz,0.0), SOR_Field(SORnx,0.0);
+	Array phi1(2,nx,ny,nz,0.0), phi2(2,nx,ny,nz,0.0), A(3,nx,ny,nz,0.0), SOR_Fields(SORnx,3,0.0);
 
-	double sigma[nx][nz], Fsigma[2], x, y, z, tolTest, Omega, distance, phiMag, normal_dist, xs, zs, xs_sigma, zs_sigma, xs_sigma2, zs_sigma2,
+	double sigma[nx][nz], Fsigma[2], x, y, z, tolTest, Omega, distance, phi1Mag, phi2Mag, AMag, normal_dist, xs, zs, xs_sigma, zs_sigma, xs_sigma2, zs_sigma2,
 		   paraVecMag, paraVecMag_sigma, a, b, sigma1, sigma2, distanceSqr1, distanceSqr2,finaldist;
 	int i,j,k, pClosest;
 
@@ -100,17 +110,17 @@ int main(){
     string file_path = __FILE__;
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
 
-    string SOR_inputPath = dir_path + "/SOR_Fields.txt";
-    string icPath = dir_path + "/ic.txt";
-    string testPath = dir_path + "/test.txt";
+    string SOR_inputPath = dir_path + "/SOR_MooreFields.txt";
+    string icPath = dir_path + "/moore_ic.txt";
+    //string testPath = dir_path + "/test.txt";
 
     ifstream SOR_input (SOR_inputPath.c_str());
     ofstream ic (icPath.c_str());
-    ofstream test (testPath.c_str());
+    //ofstream test (testPath.c_str());
 
     for(i=0;i<SORnx;i++){
 
-    	SOR_input >> SOR_Field(i);
+    	SOR_input >> SOR_Fields(i,0) >> SOR_Fields(i,1) >> SOR_Fields(i,2);
 
     }
 
@@ -137,7 +147,7 @@ int main(){
 
     double sigmaInit = 0;
 
-    for(k=0;k<=z0;k++){
+    for(k=z0;k<nz;k++){
 
     	z = (k-z0)*dz;
 
@@ -158,8 +168,8 @@ int main(){
     		tolTest=1;
     		int iterNum=0;
 
-    		a = -pi/Omega;
-    		b = 0;
+    		a = 0;
+    		b = pi/Omega;
 
     		sigma1 = b - (b-a)/gr;
    			sigma2 = a + (b-a)/gr;
@@ -170,6 +180,8 @@ int main(){
    			distanceSqr2 = pow(x - eps*cos(Omega*sigma2)/Omega,2) + pow(z - ( (1-0.25*eps*eps)*Omega*sigma2 + 0.125*eps*eps*sin(2*Omega*sigma2) )/Omega,2);
 
     		while(tolTest>tol){
+
+    			/////////////////////// Newton - Rhapson method /////////////////////////////////////////////////////////
 
     			// tolTest = 0;
 
@@ -231,7 +243,7 @@ int main(){
    				// }
 
 
-   				// Try a golden section search instead with recomputing
+   				/////////////////////////// Golden section search ///////////////////////////////////////////////
 
    				if(distanceSqr1<distanceSqr2){
 
@@ -298,7 +310,7 @@ int main(){
 
     		normal_dist = ( zs_sigma*(x-xs) - xs_sigma*(z-zs) )/paraVecMag;
 
-     		test << x << " " << z << " " << normal_dist << " " << sqrt(pow(x-xs,2) + pow(z-zs,2)) << " " << sqrt(finaldist) << endl;
+     		//test << x << " " << z << " " << normal_dist << " " << sqrt(pow(x-xs,2) + pow(z-zs,2)) << " " << sqrt(finaldist) << endl;
 
 
     		for(j=0;j<ny;j++){
@@ -313,43 +325,69 @@ int main(){
 
     				// 1st order interpolation since only have grid points on one side.
 
-     				phiMag = ( SOR_Field(pClosest+1)*distance - SOR_Field(pClosest)*(distance-SORa) )/SORa;
+     				phi1Mag = ( SOR_Fields(pClosest+1,0)*distance - SOR_Fields(pClosest,0)*(distance-SORa) )/SORa;
+     				phi2Mag = ( SOR_Fields(pClosest+1,1)*distance - SOR_Fields(pClosest,1)*(distance-SORa) )/SORa;
+     				AMag = ( SOR_Fields(pClosest+1,2)*distance - SOR_Fields(pClosest,2)*(distance-SORa) )/SORa;
 
      			} else if(pClosest<SORnx){
 
      				// 2nd order interpolation
 
-     				phiMag = ( SOR_Field(pClosest-1)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Field(pClosest)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
-     						   SOR_Field(pClosest+1)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
+     				phi1Mag = ( SOR_Fields(pClosest-1,0)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,0)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
+     						   SOR_Fields(pClosest+1,0)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
+
+     				phi2Mag = ( SOR_Fields(pClosest-1,1)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,1)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
+     						   SOR_Fields(pClosest+1,1)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
+
+     				AMag = ( SOR_Fields(pClosest-1,2)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,2)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
+     						 SOR_Fields(pClosest+1,2)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
 
      			} else{
 
-     				phiMag = 1;
+     				phi1Mag = eta1;
+     				phi2Mag = eta2;
+
+     				if(g==0){ AMag = 0; }
+     				else{ AMag = n/g; }
 
      				cout << "Off straight string solution grid" << endl;
 
      			}
 
-     			// Now need to set phase of phi.
+     			// Now need to set phase of phi and split A_theta (theta defined with respect to string) into cartesian components
 
 
      			if(normal_dist==0){
 
-     				phi(0,i,j,k) = 0;
+     				// To prevent division by zero
+
+     				phi1(0,i,j,k) = 0;
+     				phi2(0,i,j,k) = 0;
+     				A(1,i,j,k) = 0;
 
      			} else{
 
-     				phi(0,i,j,k) = phiMag*normal_dist/sqrt(pow(normal_dist,2)+y*y);
+     				phi1(0,i,j,k) = phi1Mag*normal_dist/distance;
+     				phi2(0,i,j,k) = phi2Mag*normal_dist/distance;
+     				A(1,i,j,k) = AMag*normal_dist/pow(distance,2);
 
      			}
 
      			if(y==0){
 
-     				phi(1,i,j,k) = 0;
+     				// To prevent division by zero
+
+     				phi1(1,i,j,k) = 0;
+     				phi2(1,i,j,k) = 0;
+     				A(0,i,j,k) = 0;
+     				A(2,i,j,k) = 0;
 
      			} else{
 
-     				phi(1,i,j,k) = phiMag*y/sqrt(pow(normal_dist,2)+y*y);
+     				phi1(1,i,j,k) = phi1Mag*y/distance;
+     				phi2(1,i,j,k) = phi2Mag*y/distance;
+     				A(0,i,j,k) = -AMag*zs_sigma*y/(pow(distance,2)*paraVecMag);
+     				A(2,i,j,k) = AMag*xs_sigma*y/(pow(distance,2)*paraVecMag);
 
      			}
 
@@ -362,8 +400,17 @@ int main(){
 
      			// }
 
-     			phi(0,i,j,nz-1-k) = phi(0,i,j,k);
-     			phi(1,i,j,nz-1-k) = phi(1,i,j,k);
+     			// Reflection across z=0
+
+     			phi1(0,i,j,nz-1-k) = phi1(0,i,j,k);
+     			phi1(1,i,j,nz-1-k) = phi1(1,i,j,k);
+
+     			phi2(0,i,j,nz-1-k) = phi2(0,i,j,k);
+     			phi2(1,i,j,nz-1-k) = phi2(1,i,j,k);
+
+     			A(0,i,j,nz-1-k) = A(0,i,j,k);
+     			A(1,i,j,nz-1-k) = A(1,i,j,k);
+     			if(k!=nz-1){ A(2,i,j,nz-2-k) = -A(2,i,j,k); }
 
     		}
 
@@ -376,7 +423,9 @@ int main(){
     	for(j=0;j<ny;j++){
     		for(k=0;k<nz;k++){
 
-    			ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << endl;
+    			// Convert gauge field to lattice link variable for use in evolution code
+
+    			ic << phi1(0,i,j,k) << " " << phi1(1,i,j,k) << " " << phi2(0,i,j,k) << " " << phi2(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
 
     		}
     	}

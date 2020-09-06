@@ -8,6 +8,8 @@ Array::Array(int a, int b, int c, int d, int e, double v){
     D = d;
     E = e;
 
+    dim = 5;
+
     array.assign(A*B*C*D*E,v);
 
 }
@@ -19,6 +21,8 @@ Array::Array(int a, int b, int c, int d, double v){
     C = c;
     D = d;
 
+    dim = 4;
+
     array.assign(A*B*C*D, v);
 
 }
@@ -29,6 +33,8 @@ Array::Array(int a, int b, int c, double v){
     B = b;
     C = c;
 
+    dim = 3;
+
     array.assign(A*B*C,v);
 
 }
@@ -38,6 +44,8 @@ Array::Array(int a, int b, double v){
     A = a;
     B = b;
 
+    dim = 2;
+
     array.assign(A*B,v);
 
 }
@@ -46,9 +54,12 @@ Array::Array(int a, double v){
 
     A = a;
 
+    dim = 1;
+
     array.assign(A,v);
 
 }
+
 
 double& Array::operator()(int a, int b, int c, int d, int e){
 

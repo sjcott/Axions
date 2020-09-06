@@ -10,20 +10,23 @@
 
 using namespace std;
 
-// Calculated the radial profile of a global, straight string for radiation study. Both parameters of the model can be removed by rescalings so here we are solving
-// a system with no free parameters. |Phi| is proportional to f_a and the length scale x is proportional to lambda^{-1/2}. Here we use the rescaled phi.
+// Calculated the radial profile of global or Abelian-Higgs, straight string for radiation study. Both parameters of the global model can be removed by rescalings so here we are solving
+// a system with no free parameters. |Phi| is proportional to f_a and the length scale x is proportional to lambda^{-1/2}. Here we use the rescaled phi which has f_a=1 and lambda=2.
+
+// Abelian-Higgs introduces the gauge coupling parameter.
 
 
-const int nx =1000001;
-const double h=0.001;
+const int nx =20001;
+const double h=0.01;
 const double w=1.5; // Relaxation factor > 1. Trial and error to get better convergence.
-const int maxIter = 20000000;
+const int maxIter = 2000000;
 const double tol = 1e-3;
 const int ic_type = 0;
 
 
 const double pi = 4*atan(1);
 const double n = 1; // Winding of the string
+const double g = 0; // Gauge coupling (g=1 is the BPS limit). Set to zero to return to a global string
 
 int main(){
 
@@ -43,13 +46,14 @@ int main(){
 
 	int i,j,iterNum;
 
-	Array phi(nx,0.0), Fphi(nx,2,0.0);
+	Array phi(nx,0.0), Fphi(nx,2,0.0), A(nx,0.0), FA(nx,2,0.0);
 
 	if(ic_type==0){
 
 		for(i=0;i<nx;i++){
 
 			phi(i) = tanh(0.5*h*i);
+			A(i)  = 0;
 
 		}
 
@@ -57,7 +61,7 @@ int main(){
 
 		for(i=0;i<nx;i++){
 
-			ic >> phi(i);
+			ic >> phi(i) >> A(i);
 
 		}
 
@@ -67,7 +71,8 @@ int main(){
 
 	// Set boundary conditions
 	phi(0) = 0;
-	phi(nx-1) = 1;
+
+	A(0) = 0;
 
 	tolTest = 1;
 	iterNum = 0;
@@ -88,26 +93,38 @@ int main(){
 
 		}
 
+		// Set derivative boundary conditions
+
+		phi(nx-1) = phi(nx-2);
+		A(nx-1) = A(nx-2);
+
 
 		// Looping over all positions in grid except boundaries.
-		# pragma omp parallel for default(none) shared(phi,Fphi)
+		# pragma omp parallel for default(none) shared(phi,A,Fphi,FA)
 		for(j=1;j<nx-1;j++){
 
 
-			Fphi(j,0) = ( pow(n/(j*h),2) + phi(j)*phi(j) - 1 )*phi(j) - ( phi(j+1) - phi(j-1) )/(2*j*h*h) - ( phi(j+1) - 2*phi(j) + phi(j-1) )/(h*h);
+			Fphi(j,0) = ( pow((n-g*A(j))/(j*h),2) + phi(j)*phi(j) - 1 )*phi(j) - ( phi(j+1) - phi(j-1) )/(2*j*h*h) - ( phi(j+1) - 2*phi(j) + phi(j-1) )/(h*h);
 
-			Fphi(j,1) = pow(n/(j*h),2) + 3*phi(j)*phi(j) - 1 + 2/(h*h);  // Derivative of Fphi[0] with respect to phi[i]
+			Fphi(j,1) = pow((n-g*A(j))/(j*h),2) + 3*phi(j)*phi(j) - 1 + 2/(h*h);  // Derivative of Fphi[0] with respect to phi[i]
+
+
+			FA(j,0) = -2*g*(n-g*A(j))*pow(phi(j),2) + ( A(j+1) - A(j-1) )/(2*j*h*h) - ( A(j+1) - 2*A(j) + A(j-1) )/(h*h);
+
+			FA(j,1) = 2*pow(g*phi(j),2) + 2/(h*h);
 
 
 			// Now update the field values by SOR.
 
-			phi(j) = phi(j) - w*Fphi(j,0)/Fphi(j,1);
+			phi(j) += - w*Fphi(j,0)/Fphi(j,1);
+			A(j) += -w*FA(j,0)/FA(j,1);
 
 		}
 
 		for(j=1;j<nx-1;j++){
 
 			if(abs(Fphi(j,0))>tolTest){ tolTest = abs(Fphi(j,0)); }
+			if(abs(FA(j,0))>tolTest){ tolTest = abs(FA(j,0)); }
 
 		}
 
@@ -115,7 +132,7 @@ int main(){
 
 	for(j=0;j<nx;j++){
 
-		SOR_Fields << phi(j) << endl;
+		SOR_Fields << phi(j) << " " << A(j) << endl;
 
 	}
 
