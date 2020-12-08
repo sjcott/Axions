@@ -50,8 +50,8 @@ int main(){
     string file_path = __FILE__;
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
 
-    string SOR_MooreFieldsPath = dir_path + "/SOR_MooreFields.txt";
-    string propsPath = dir_path + "/props.txt";
+    string SOR_MooreFieldsPath = dir_path + "/Data/SOR_MooreFields.txt";
+    string propsPath = dir_path + "/Data/props.txt";
 
     ifstream ic (SOR_MooreFieldsPath.c_str());
 

@@ -18,26 +18,27 @@ using namespace std;
 
 const int nx = 201;
 const int ny = 201;
-const int nz = 201;
-const int nt = 6001;
-const double dx = 0.5;
-const double dy = 0.5;
-const double dz = 0.5;
-const double dt = 0.2;
+const int nz = 51;
+const int nt = 10001;
+const double dx = 0.7;
+const double dy = 0.7;
+const double dz = 0.7;
+const double dt = 0.3;
 
-const double g = 0;
+const double g = 1;
 
-const int damped_nt = 1001; // Number of time steps for which damping is imposed. Useful for random initial conditions
-const double dampFac = 1; // magnitude of damping term, unclear how strong to make this
+const int damped_nt = 0; // Number of time steps for which damping is imposed. Useful for random initial conditions
+const double dampFac = 0; // magnitude of damping term, unclear how strong to make this
 
 const bool makeGif = false;
-const int saveFreq = 10;
+const int saveFreq = 20;
 const int countRate = 10;
 
-const string xyBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "absorbing", "periodic" or fixed (any other string will choose this option) boundary conditions.
-const string zBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "periodic" or fixed (any other string will choose this option) boundary conditions.
+const string xyBC = "fixed"; // Allows for "neumann" (covariant derivatives set to zero), "absorbing", "periodic" or fixed (any other string will choose this option) boundary conditions.
+const string zBC = "fixed"; // Allows for "neumann" (covariant derivatives set to zero), "periodic" or fixed (any other string will choose this option) boundary conditions.
 
-const bool stringPos = false;
+const bool stringPos = true;
+const bool stationary_ic = true;
 
 
 int main(){
@@ -45,7 +46,7 @@ int main(){
 	Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0);
 	int comp, i, j, k, TimeStep, gifFrame, tNow, tPast, s, counter, x0, y0, z0, xEdge1, xEdge2, yEdge1, yEdge2, zEdge1, zEdge2, im, jm, km, ip, jp, kp;
     double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], curx, cury, curz, Fxy_y, Fxz_z, Fyx_x, Fyz_z, Fzx_x, Fzy_y, phit[2], energy, phitx, phity, thetat[3], divTheta[2], divThetat,
-           thetaDotCont, Fxy, Fxz, Fyz, FCont, deviationParameter, thetaxx, thetayy, thetazz, thetatx, thetaty, damp;
+           thetaDotCont, Fxy, Fxz, Fyz, FCont, deviationParameter, thetaxx, thetayy, thetazz, thetatx, thetaty, damp, input;
     int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
 
 	struct timeval start, end;
@@ -55,11 +56,15 @@ int main(){
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
     stringstream ss;
 
-    string icPath = dir_path + "/ic.txt";
-    string finalFieldPath = dir_path + "/finalField.txt";
-    string valsPerLoopPath = dir_path + "/valsPerLoop.txt";
+    cin >> input;
+    ss << setprecision(2) << input;
+
+    string icPath = dir_path + "/Data/ic.txt";
+    string finalFieldPath = dir_path + "/Data/finalField.txt";
+    string valsPerLoopPath = dir_path + "/Data/valsPerLoop_BPS_eps" + ss.str() + ".txt";
+    //string valsPerLoopPath = dir_path + "/Data/valsPerLoop.txt";
     string test1Path = dir_path + "/test1.txt";
-    string powerdensityOutPath = dir_path + "/powerdensityOut.txt";
+    string powerdensityOutPath = dir_path + "/Data/powerdensityOut.txt";
 
     ifstream ic (icPath.c_str());
     ofstream finalField (finalFieldPath.c_str());
@@ -71,22 +76,40 @@ int main(){
     y0 = int(0.5*(ny-1));
     z0 = int(0.5*(nz-1));
 
-    for(i=0;i<nx;i++){
-        for(j=0;j<ny;j++){
-            for(k=0;k<nz;k++){
+    if(stationary_ic){
 
-                ic >> phi(0,0,i,j,k) >> phi(1,0,i,j,k) >> theta(0,0,i,j,k) >> theta(1,0,i,j,k) >> theta(2,0,i,j,k);
+        for(i=0;i<nx;i++){
+            for(j=0;j<ny;j++){
+                for(k=0;k<nz;k++){
 
-                // Second time step is equal to first.
+                    ic >> phi(0,0,i,j,k) >> phi(1,0,i,j,k) >> theta(0,0,i,j,k) >> theta(1,0,i,j,k) >> theta(2,0,i,j,k);
 
-                phi(0,1,i,j,k) = phi(0,0,i,j,k);
-                phi(1,1,i,j,k) = phi(1,0,i,j,k);
-                theta(0,1,i,j,k) = theta(0,0,i,j,k);
-                theta(1,1,i,j,k) = theta(1,0,i,j,k);
-                theta(2,1,i,j,k) = theta(2,0,i,j,k);
+                    // Second time step is equal to first.
 
+                    phi(0,1,i,j,k) = phi(0,0,i,j,k);
+                    phi(1,1,i,j,k) = phi(1,0,i,j,k);
+                    theta(0,1,i,j,k) = theta(0,0,i,j,k);
+                    theta(1,1,i,j,k) = theta(1,0,i,j,k);
+                    theta(2,1,i,j,k) = theta(2,0,i,j,k);
+
+                }
             }
         }
+
+    } else{
+
+        for(TimeStep=0;TimeStep<2;TimeStep++){
+            for(i=0;i<nx;i++){
+                for(j=0;j<ny;j++){
+                    for(k=0;k<nz;k++){
+
+                        ic >> phi(0,TimeStep,i,j,k) >> phi(1,TimeStep,i,j,k) >> theta(0,TimeStep,i,j,k) >> theta(1,TimeStep,i,j,k) >> theta(2,TimeStep,i,j,k);
+
+                    }
+                }
+            }
+        }
+
     }
 
     gifFrame = 0;
@@ -110,6 +133,34 @@ int main(){
         tNow = (TimeStep+1)%2;
         tPast = TimeStep%2;
 
+        if(xyBC == "periodic"){ 
+
+            xEdge1 = 0;
+            xEdge2 = nx;
+            yEdge1 = 0;
+            yEdge2 = ny; 
+
+        } else{
+
+            xEdge1 = 1;
+            xEdge2 = nx-1;
+            yEdge1 = 1;
+            yEdge2 = ny-1;
+
+        }
+
+        if(zBC == "periodic"){
+
+            zEdge1 = 0;
+            zEdge2 = nz;
+
+        } else{
+
+            zEdge1 = 1;
+            zEdge2 = nz-1;
+
+        }
+
         // Set boundary conditions. Different loop sizes so that corner allocation is done correctly.
 
         // Sets Neumann boundary conditions on x and y
@@ -117,7 +168,7 @@ int main(){
         if(xyBC=="neumann"){
 
             for(i=1;i<nx-1;i++){
-                for(k=1;k<nz-1;k++){
+                for(k=zEdge1;k<zEdge2;k++){
 
                     // Doing theta first because it is used in one of the covariant derivative of phi
                     for(comp=0;comp<3;comp++){
@@ -138,7 +189,7 @@ int main(){
             }
 
             for(j=0;j<ny;j++){
-                for(k=1;k<nz-1;k++){
+                for(k=zEdge1;k<zEdge2;k++){
 
                     // Doing theta first because it is used in one of the covariant derivative of phi
                     for(comp=0;comp<3;comp++){
@@ -192,34 +243,6 @@ int main(){
 
         energy=0;
         deviationParameter = 0;
-
-        if(xyBC == "periodic"){ 
-
-            xEdge1 = 0;
-            xEdge2 = nx;
-            yEdge1 = 0;
-            yEdge2 = ny; 
-
-        } else{
-
-            xEdge1 = 1;
-            xEdge2 = nx-1;
-            yEdge1 = 1;
-            yEdge2 = ny-1;
-
-        }
-
-        if(zBC == "periodic"){
-
-            zEdge1 = 0;
-            zEdge2 = nz;
-
-        } else{
-
-            zEdge1 = 1;
-            zEdge2 = nz-1;
-
-        }
 
         #pragma omp parallel for reduction(+:energy,deviationParameter) default(none) shared(phi,theta,phitt,thetatt,energydensity,powerdensity,gaussDeviation,tNow,tPast,c,TimeStep,damp,xEdge1, \
         xEdge2,yEdge1,yEdge2,zEdge1,zEdge2) \
@@ -692,6 +715,11 @@ int main(){
             }
         }
 
+        if(xyBC == "periodic"){ deviationParameter = deviationParameter/(nx*ny); } // Include boundaries in average
+        else{ deviationParameter = deviationParameter/((nx-2)*(ny-2)); }
+
+        if(zBC == "periodic"){ deviationParameter = deviationParameter/nz; }
+        else{ deviationParameter = deviationParameter/(nz-2); }
 
 
         valsPerLoop << energy << " " << pos << " " << deviationParameter/((nx-2)*(ny-2)*(nz-2)) << endl;

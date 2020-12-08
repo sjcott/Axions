@@ -26,7 +26,7 @@ const int ic_type = 0;
 
 const double pi = 4*atan(1);
 const double n = 1; // Winding of the string
-const double g = 0; // Gauge coupling (g=1 is the BPS limit). Set to zero to return to a global string
+const double g = 1; // Gauge coupling (g=1 is the BPS limit). Set to zero to return to a global string
 
 int main(){
 
@@ -36,7 +36,7 @@ int main(){
     string file_path = __FILE__;
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
 
-    string SOR_FieldsPath = dir_path + "/SOR_Fields.txt";
+    string SOR_FieldsPath = dir_path + "/Data/SOR_Fields.txt";
 
     ifstream ic (SOR_FieldsPath.c_str());
 

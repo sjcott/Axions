@@ -110,8 +110,8 @@ int main(){
     string file_path = __FILE__;
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
 
-    string SOR_inputPath = dir_path + "/SOR_MooreFields.txt";
-    string icPath = dir_path + "/moore_ic.txt";
+    string SOR_inputPath = dir_path + "/Data/SOR_MooreFields.txt";
+    string icPath = dir_path + "/Data/moore_ic.txt";
     //string testPath = dir_path + "/test.txt";
 
     ifstream SOR_input (SOR_inputPath.c_str());

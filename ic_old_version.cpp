@@ -70,11 +70,10 @@ typedef complex<double> dcmplx;
 //                                 		  Parameters & Declarations
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const string ic_type = "simple sine";	 // Which type of initial condition generation to use. "NG sine" bases initial conditions on the Nambu-Goto sine wave solution constructed with straight string solutions 
-                                 	 // "simple sine" offsets the straight string solutions (x position) by a sine wave
-			         	 // "random" creates random initial conditions. "boost" creates a single straight (z directed) string with a Lorentz boost applied.
-                                 	 // "loop collision" creates two sets of (seperated) string, anti-string pairs. They are boosted towards each other and patched together so that they will collide
-                                 	 // and form a loop (2 one due to periodic boundary conditions which are required for this sim) 
+const string ic_type = "string"; // Which type of initial condition generation to use. ""string" bases initial conditions on straight string solutions (sine perturbation at the moment - adapt 
+                                // for others later). "random" creates random initial conditions. "boost" creates a single straight (z directed) string with a Lorentz boost applied.
+                                // "loop collision" creates two sets of (seperated) string, anti-string pairs. They are boosted towards each other and patched together so that they will collide
+                                // and form a loop (2 one due to periodic boundary conditions which are required for this sim) 
 
 const int nx = 201;
 const int ny = 201;
@@ -84,7 +83,7 @@ const double dy = 0.7;
 const double dz = 0.7;
 
 const int n = 1; // This is useless for now, code assumes it is 1.
-const double g = 0;
+const double g = 1;
 
 const double pi = 4*atan(1);
 
@@ -93,10 +92,9 @@ const double pi = 4*atan(1);
 const int SORnx = 20001;
 const double SORa = 0.01;
 
-// Needed for perturbed NG straight strings (i.e NG sine) ///////////////////////////
+// Needed for perturbed straight strings (i.e sine string) ///////////////////////////
 
 const double tol = 1e-6;
-const int N_ellipint = 1001; // Number of points to use for elliptical integral evaluation
 
 //const double eps = 0.1;
 //const double lambda = dz*(nz-1)/(1-0.25*eps*eps);
@@ -144,7 +142,7 @@ int main(){
 
     double eps, lambda;
     cin >> eps;
-    //lambda = dz*(nz-1)/(1-0.25*eps*eps);
+    lambda = dz*(nz-1)/(1-0.25*eps*eps);
 
     Array phi(2,nx,ny,nz,0.0), A(3,nx,ny,nz,0.0);
     int i,j,k,comp;
@@ -156,10 +154,10 @@ int main(){
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
 
     string icPath = dir_path + "/Data/ic.txt";
-    string test1sPath = dir_path + "/Data/test1s.txt";
-    string test1aPath = dir_path + "/Data/test1a.txt";
-    string test2sPath = dir_path + "/Data/test2s.txt";
-    string test2aPath = dir_path + "/Data/test2a.txt";
+    string test1sPath = dir_path + "/test1s.txt";
+    string test1aPath = dir_path + "/test1a.txt";
+    string test2sPath = dir_path + "/test2s.txt";
+    string test2aPath = dir_path + "/test2a.txt";
 
     ofstream ic (icPath.c_str());
     ofstream test1s (test1sPath.c_str());
@@ -167,16 +165,16 @@ int main(){
     ofstream test2s (test2sPath.c_str());
     ofstream test2a (test2aPath.c_str());
 
-    if(ic_type == "NG sine"){
+    if(ic_type == "string"){
 
     	Array SOR_Fields(SORnx,2,0.0);
 
         double sigma[nx][nz], Fsigma[2], x, y, z, tolTest, Omega, distance, phiMag, AMag, normal_dist, xs, zs, xs_sigma, zs_sigma, xs_sigma2, zs_sigma2,
-               paraVecMag, paraVecMag_sigma, a, b, sigma1, sigma2, distanceSqr1, distanceSqr2, finaldist, ellipint, theta, trap_fac;
+               paraVecMag, paraVecMag_sigma, a, b, sigma1, sigma2, distanceSqr1, distanceSqr2,finaldist;
         int pClosest;
 
-        string SOR_inputPath = dir_path + "/Data/SOR_Fields.txt";
-        string testPath = dir_path + "/Data/test.txt";
+        string SOR_inputPath = dir_path + "/SOR_Fields.txt";
+        string testPath = dir_path + "/test.txt";
 
         ifstream SOR_input (SOR_inputPath.c_str());
         ofstream test (testPath.c_str());
@@ -188,25 +186,8 @@ int main(){
         }
 
         // Define epsilon and Omega based off amplitude and wavelength. Make sure that epsilon is small for accuracy. Maybe add check that it's at least less than 1.
-	// Calculate elliptic integral of second kind with limit 2*pi (using trap rule) to fix the correct value of Omega
 
-	//Omega = 2*pi/lambda;
-
-	ellipint = 0;
-	for(j=0;j<N_ellipint;j++){
-
-            if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	    else{ trap_fac = 1; }
-
-	    theta = j*2*pi/(N_ellipint-1);
-
-	    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*2*pi/(N_ellipint-1);
-
-	}
-
-
-
-	Omega = ellipint/(dz*(nz-1)); // Sets Omega so that string is periodic after z boundaries
+        Omega = 2*pi/lambda;
 
         //cout << 2*eps/Omega << endl;
 
@@ -250,44 +231,18 @@ int main(){
                 tolTest=1;
                 int iterNum=0;
 
-                a = -2*pi/Omega;
-                b = 2*pi/Omega;
+                a = 0;
+                b = pi/Omega;
 
                 sigma1 = b - (b-a)/gr;
                 sigma2 = a + (b-a)/gr;
 
                 //cout << sigma1 << " " << sigma2 << " " << a << endl;
 
-                // Calculate the elliptical integrals to find the z coordinate of the string and shift phase by pi/2
+                // +1 in x distance so that z boundaries are fixed at x=0
 
-		ellipint = 0;
-		for(j=0;j<N_ellipint;j++){
-
-		    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	            else{ trap_fac = 1; }
-
-	            theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
-
-	            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
-
-		}
-
-                distanceSqr1 = pow(x - eps*cos(Omega*sigma1 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
-
-		ellipint = 0;
-		for(j=0;j<N_ellipint;j++){
-
-		    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	            else{ trap_fac = 1; }
-
-	            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
-
-	            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
-
-		}
-
-
-                distanceSqr2 = pow(x - eps*cos(Omega*sigma2 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
+                distanceSqr1 = pow(x - eps*(1 + cos(Omega*sigma1))/Omega,2) + pow(z - ( (1-0.25*eps*eps)*Omega*sigma1 + 0.125*eps*eps*sin(2*Omega*sigma1) )/Omega,2);
+                distanceSqr2 = pow(x - eps*(1 + cos(Omega*sigma2))/Omega,2) + pow(z - ( (1-0.25*eps*eps)*Omega*sigma2 + 0.125*eps*eps*sin(2*Omega*sigma2) )/Omega,2);
 
                 while(tolTest>tol){
 
@@ -363,98 +318,46 @@ int main(){
 
                         sigma1 = b - (b-a)/gr;
                         sigma2 = a + (b-a)/gr;
-
-			ellipint = 0;
-			for(j=0;j<N_ellipint;j++){
-
-			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	           	    else{ trap_fac = 1; }
-
-	            	    theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
-
-	            	    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
-
-			}
-
-
-                        distanceSqr1 = pow(x - eps*cos(Omega*sigma1 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
-
-			ellipint = 0;
-			for(j=0;j<N_ellipint;j++){
-
-			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-		            else{ trap_fac = 1; }
-
-		            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
-
-		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
-
-			}
-
-
-			distanceSqr2 = pow(x - eps*cos(Omega*sigma2 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
+   					
+                        distanceSqr1 = pow(x - eps*(1 +cos(Omega*sigma1))/Omega,2) + pow(z - ( (1-0.25*eps*eps)*Omega*sigma1 + 0.125*eps*eps*sin(2*Omega*sigma1) )/Omega,2);
+                        distanceSqr2 = pow(x - eps*(1 +cos(Omega*sigma2))/Omega,2) + pow(z - ( (1-0.25*eps*eps)*Omega*sigma2 + 0.125*eps*eps*sin(2*Omega*sigma2) )/Omega,2);
 
                     } else{
 
-   			a = sigma1;
+   					    a = sigma1;
 
-   			//cout << "2>1 and " << b - gr*(b-a) << " " << sigma1 << endl;
+   				        //cout << "2>1 and " << b - gr*(b-a) << " " << sigma1 << endl;
 
-   		        sigma1 = b - (b-a)/gr;
-   	      		sigma2 = a + (b-a)/gr;
+   				        sigma1 = b - (b-a)/gr;
+   			      		sigma2 = a + (b-a)/gr;
 
-			ellipint = 0;
-			for(j=0;j<N_ellipint;j++){
+   				     	distanceSqr1 = pow(x - eps*(1 +cos(Omega*sigma1))/Omega,2) + pow(z - ( (1-0.25*eps*eps)*Omega*sigma1 + 0.125*eps*eps*sin(2*Omega*sigma1) )/Omega,2);
+   					    distanceSqr2 = pow(x - eps*(1 +cos(Omega*sigma2))/Omega,2) + pow(z - ( (1-0.25*eps*eps)*Omega*sigma2 + 0.125*eps*eps*sin(2*Omega*sigma2) )/Omega,2);
 
-			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-		            else{ trap_fac = 1; }
+   			      	}
 
-		            theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
+   		       		tolTest = b-a;
 
-		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
+   		       		if(tolTest<=tol){
 
-			}
+   				     	if(distanceSqr1>distanceSqr2){
 
-   		     	distanceSqr1 = pow(x - eps*cos(Omega*sigma1 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
+   			      			sigma[i][k] = sigma2;
 
-			ellipint = 0;
-			for(j=0;j<N_ellipint;j++){
-
-			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-		            else{ trap_fac = 1; }
-
-		            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
-
-		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
-
-			}
-
-  	    		distanceSqr2 = pow(x - eps*cos(Omega*sigma2 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
-
-   		    }
-
-   		    tolTest = b-a;
-
-      		    if(tolTest<=tol){
-
-   		     	if(distanceSqr1>distanceSqr2){
-
-       			    sigma[i][k] = sigma2;
-
-         		    finaldist = distanceSqr2;
+   			      			finaldist = distanceSqr2;
 
 
-   			} else{
+   			      		} else{
 
-   	     		    sigma[i][k] = sigma1;
+   				     		sigma[i][k] = sigma1;
 
-     			    finaldist = distanceSqr1;
+   			      			finaldist = distanceSqr1;
 
-   		       	}
+   		       			}
 
-   	    	    }
+   	    			}
 
-        	}
+        		}
 
     	       	// Use this value of sigma as the next initial guess
 
@@ -462,30 +365,18 @@ int main(){
 
     	       	// Test if the distance is equal to the dot product with unit normal
 
-        	xs = eps*cos(Omega*sigma[i][k] - pi/2)/Omega; // Could change this to a sine wave to make it simpler
+        		xs = eps*(1 + cos(Omega*sigma[i][k]))/Omega;
+   		       	zs = ( (1-0.25*eps*eps)*Omega*sigma[i][k] + 0.125*eps*eps*sin(2*Omega*sigma[i][k]) )/Omega;
 
-		ellipint = 0;
-		for(j=0;j<N_ellipint;j++){
+   	    		xs_sigma = -eps*sin(Omega*sigma[i][k]);
+   	    		zs_sigma = 1-0.25*eps*eps + 0.25*eps*eps*cos(2*Omega*sigma[i][k]);
 
-		    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	            else{ trap_fac = 1; }
-
-	            theta = j*Omega*sigma[i][k]/(N_ellipint-1) - pi/2;
-
-	            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma[i][k]/(N_ellipint-1);
-
-		}
-
-   		zs = ellipint/Omega;
-
-   	        xs_sigma = -eps*sin(Omega*sigma[i][k] - pi/2);
-   	        zs_sigma = sqrt(1 - pow(eps*sin(Omega*sigma[i][k] - pi/2),2));
-
-	       	paraVecMag = sqrt(pow(xs_sigma,2) + pow(zs_sigma,2)); // May be able to remove this as I think it's alwaus exactly 1
+	       		paraVecMag = sqrt(pow(xs_sigma,2) + pow(zs_sigma,2));
 
     	       	normal_dist = ( zs_sigma*(x-xs) - xs_sigma*(z-zs) )/paraVecMag;
 
-        	test << x << " " << z << " " << normal_dist << " " << sqrt(pow(x-xs,2) + pow(z-zs,2)) << " " << sqrt(finaldist) << " " << pow(xs_sigma,2) << " " << pow(zs_sigma,2) << endl;
+        		test << x << " " << z << " " << normal_dist << " " << sqrt(pow(x-xs,2) + pow(z-zs,2)) << " " << sqrt(finaldist) << endl;
+
 
     	       	for(j=0;j<ny;j++){
 
@@ -551,7 +442,7 @@ int main(){
      	      		} else{
 
      	      			phi(1,i,j,k) = phiMag*y/distance;
-        			A(0,i,j,k) = -AMag*zs_sigma*y/(pow(distance,2)*paraVecMag);
+        				A(0,i,j,k) = -AMag*zs_sigma*y/(pow(distance,2)*paraVecMag);
      	      			A(2,i,j,k) = AMag*xs_sigma*y/(pow(distance,2)*paraVecMag);
 
      	      		}
@@ -562,154 +453,36 @@ int main(){
 
      	      		// 	phi(0,i,j,nz-k) = phi(0,i,j,k);
         			// 	phi(1,i,j,nz-k) = phi(1,i,j,k);
+
         			// }
 
      	      		// Reflection across z=0
 
-     	      		phi(0,nx-1-i,j,nz-1-k) = -phi(0,i,j,k);
-     	      		phi(1,nx-1-i,j,nz-1-k) = phi(1,i,j,k);
+     	      		phi(0,i,j,nz-1-k) = phi(0,i,j,k);
+     	      		phi(1,i,j,nz-1-k) = phi(1,i,j,k);
 
-     	      		A(0,nx-1-i,j,nz-1-k) = A(0,i,j,k);
-     	      		A(1,nx-1-i,j,nz-1-k) = -A(1,i,j,k);
-     	      		if(k!=nz-1){ A(2,nx-1-i,j,nz-2-k) = -A(2,i,j,k); }
+     	      		A(0,i,j,nz-1-k) = A(0,i,j,k);
+     	      		A(1,i,j,nz-1-k) = A(1,i,j,k);
+     	      		if(k!=nz-1){ A(2,i,j,nz-2-k) = -A(2,i,j,k); }
 
         		}
 
          	}
         }
 
-    	// Output field to file
+    // Output field to file
 
-    	for(i=0;i<nx;i++){
-   	    for(j=0;j<ny;j++){
-        	for(k=0;k<nz;k++){
+    for(i=0;i<nx;i++){
+        for(j=0;j<ny;j++){
+            for(k=0;k<nz;k++){
 
-            	    // Convert gauge field to lattice link variable for use in evolution code
+                // Convert gauge field to lattice link variable for use in evolution code
 
-            	    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+                ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
 
-        	}
             }
         }
-
-    } else if(ic_type == "simple sine"){
-
-	Array SOR_Fields(SORnx,2,0.0);
-
-        double x, y, z, Omega, distance, phiMag, AMag, xdist;
-        int pClosest;
-
-        string SOR_inputPath = dir_path + "/Data/SOR_Fields.txt";
-        ifstream SOR_input (SOR_inputPath.c_str());
-
-        for(i=0;i<SORnx;i++){
-
-    	   SOR_input >> SOR_Fields(i,0) >> SOR_Fields(i,1);
-
-        }
-
-	Omega = 2*pi/(dz*(nz-1));
-
-	int x0 = round((nx-1)/2);
-        int y0 = round((ny-1)/2);
-        int z0 = round((nz-1)/2);
-
-	for(i=0;i<nx;i++){
-
-	    x = (i-x0)*dx;
-
-	    for(j=0;j<ny;j++){
-
-		y = (j-y0)*dy;
-
-		for(k=0;k<nz;k++){
-
-		    z = (k-z0)*dz;
-
-		    xdist = x - eps*sin(Omega*z)/Omega;
-
-		    distance = sqrt( xdist*xdist + y*y ); //x-y plane distance from string
-
-		    pClosest = round(distance/SORa);
-
-    		    if(pClosest==0){
-
-    		      	// 1st order interpolation since only have grid points on one side.
-
-     	      		phiMag = ( SOR_Fields(pClosest+1,0)*distance - SOR_Fields(pClosest,0)*(distance-SORa) )/SORa;
-     	      	 	AMag = ( SOR_Fields(pClosest+1,1)*distance - SOR_Fields(pClosest,1)*(distance-SORa) )/SORa;
-
-     	      	    } else if(pClosest<SORnx){
-
-     	      		// 2nd order interpolation
-
-     	      		phiMag = ( SOR_Fields(pClosest-1,0)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,0)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
-     		     		   SOR_Fields(pClosest+1,0)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
-
-     		     	AMag = ( SOR_Fields(pClosest-1,1)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,1)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
-     		     		 SOR_Fields(pClosest+1,1)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
-
-     	      	    } else{
-
-        		phiMag = 1;
-
-     	      		if(g==0){ AMag = 0; }
-        		else{ AMag = n/g; }
-
-     	      		cout << "Off straight string solution grid" << endl;
-
-        	    }
-
-		    // Now need to assign the phase of phi and components of gauge fields
-
-		    if(xdist==0){
-
-     	      		// To prevent division by zero
-
-     			phi(0,i,j,k) = 0;
-     			A(1,i,j,k) = 0;
-
-		    } else{
-
-     		    	phi(0,i,j,k) = phiMag*xdist/distance;
-     	     		A(1,i,j,k) = AMag*xdist/pow(distance,2);
-
-        	    }
-
-     	      	    if(y==0){
-
-     		  	// To prevent division by zero
-
-     		     	phi(1,i,j,k) = 0;
-     		     	A(0,i,j,k) = 0;
-     	      		A(2,i,j,k) = 0;
-
-     	      	    } else{
-
-     	      		phi(1,i,j,k) = phiMag*y/distance;
-        		A(0,i,j,k) = -AMag*y/pow(distance,2);
-     	      		A(2,i,j,k) = 0;
-
-     	      	    }
-
-		}
-	    }
-	}
-
-	// Output field to file
-
-    	for(i=0;i<nx;i++){
-   	    for(j=0;j<ny;j++){
-        	for(k=0;k<nz;k++){
-
-            	    // Convert gauge field to lattice link variable for use in evolution code
-
-            	    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
-
-        	}
-            }
-        }
-
+    }
 
     } else if(ic_type == "random"){
 

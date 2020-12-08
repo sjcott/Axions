@@ -58,9 +58,9 @@ int main(){
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
     stringstream ss;
 
-    string icPath = dir_path + "/moore_ic.txt";
-    string finalFieldPath = dir_path + "/finalField.txt";
-    string valsPerLoopPath = dir_path + "/valsPerLoop.txt";
+    string icPath = dir_path + "/Data/moore_ic.txt";
+    string finalFieldPath = dir_path + "/Data/finalField.txt";
+    string valsPerLoopPath = dir_path + "/Data/valsPerLoop.txt";
     string test1Path = dir_path + "/test1.txt";
     string test2Path = dir_path + "/test2.txt";
 
