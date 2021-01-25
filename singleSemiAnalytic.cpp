@@ -25,8 +25,11 @@ const int ic_type = 0;
 
 
 const double pi = 4*atan(1);
+
 const double n = 1; // Winding of the string
-const double g = 1; // Gauge coupling (g=1 is the BPS limit). Set to zero to return to a global string
+const double lambda = 1;
+const double eta = 1;
+const double g = 0; // Gauge coupling (g=1 is the BPS limit). Set to zero to return to a global string
 
 int main(){
 
@@ -52,7 +55,7 @@ int main(){
 
 		for(i=0;i<nx;i++){
 
-			phi(i) = tanh(0.5*h*i);
+			phi(i) = eta*tanh(0.5*h*i);
 			A(i)  = 0;
 
 		}
@@ -104,9 +107,9 @@ int main(){
 		for(j=1;j<nx-1;j++){
 
 
-			Fphi(j,0) = ( pow((n-g*A(j))/(j*h),2) + phi(j)*phi(j) - 1 )*phi(j) - ( phi(j+1) - phi(j-1) )/(2*j*h*h) - ( phi(j+1) - 2*phi(j) + phi(j-1) )/(h*h);
+			Fphi(j,0) = ( pow((n-g*A(j))/(j*h),2) + 0.5*lambda*(pow(phi(j),2) - pow(eta,2)) )*phi(j) - ( phi(j+1) - phi(j-1) )/(2*j*h*h) - ( phi(j+1) - 2*phi(j) + phi(j-1) )/(h*h);
 
-			Fphi(j,1) = pow((n-g*A(j))/(j*h),2) + 3*phi(j)*phi(j) - 1 + 2/(h*h);  // Derivative of Fphi[0] with respect to phi[i]
+			Fphi(j,1) = pow((n-g*A(j))/(j*h),2) + 0.5*lambda*(3*pow(phi(j),2) - pow(eta,2)) + 2/(h*h);  // Derivative of Fphi[0] with respect to phi[i]
 
 
 			FA(j,0) = -2*g*(n-g*A(j))*pow(phi(j),2) + ( A(j+1) - A(j-1) )/(2*j*h*h) - ( A(j+1) - 2*A(j) + A(j-1) )/(h*h);

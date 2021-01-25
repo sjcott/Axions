@@ -14,63 +14,12 @@ typedef complex<double> dcmplx;
 
 // Perturb a straight, global string solution, evolve the system and investigate how it radiates.
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                           Class Definitions
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-// class Array{
-
-//     public:
-
-//         Array(int,int,int,int,double); // Constructor for 4d arrays
-//         Array(int,int,int,double); // Constructor for 3d arrays
-
-//         int A, B, C, D; // Sizes of each dimension
-//         vector<double> array; //Empty vector container for the array
-
-//         double& operator()(int a, int b, int c, int d){ // Overloads operator to allow easy indexing of 4d arrays
-
-//             return array[D*(C*(B*a + b) + c) + d];
-
-//         }
-
-//         double& operator()(int a, int b, int c){ // Same as above for 3d arrays
-
-//             return array[C*(B*a + b) + c];
-
-//         }
-
-// };
-
-// // Defining array constructors
-
-// Array::Array(int a, int b, int c, int d, double v){
-
-//     A = a;
-//     B = b;
-//     C = c;
-//     D = d;
-
-//     array.assign(A*B*C*D, v);
-
-// }
-
-// Array::Array(int a, int b, int c, double v){
-
-//     A = a;
-//     B = b;
-//     C = c;
-
-//     array.assign(A*B*C,v);
-
-// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                 		  Parameters & Declarations
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const string ic_type = "simple sine";	 // Which type of initial condition generation to use. "NG sine" bases initial conditions on the Nambu-Goto sine wave solution constructed with straight string solutions 
+const string ic_type = "loop collision";	 // Which type of initial condition generation to use. "NG sine" bases initial conditions on the Nambu-Goto sine wave solution constructed with straight string solutions 
                                  	 // "simple sine" offsets the straight string solutions (x position) by a sine wave
 			         	 // "random" creates random initial conditions. "boost" creates a single straight (z directed) string with a Lorentz boost applied.
                                  	 // "loop collision" creates two sets of (seperated) string, anti-string pairs. They are boosted towards each other and patched together so that they will collide
@@ -78,10 +27,11 @@ const string ic_type = "simple sine";	 // Which type of initial condition genera
 
 const int nx = 201;
 const int ny = 201;
-const int nz = 51;
-const double dx = 0.7;
-const double dy = 0.7;
-const double dz = 0.7;
+const int nz = 201;
+const double dx = 0.25;
+const double dy = 0.25;
+const double dz = 0.25;
+const double dt = 0.05;
 
 const int n = 1; // This is useless for now, code assumes it is 1.
 const double g = 0;
@@ -107,10 +57,6 @@ const double gr = 0.5*(1+sqrt(5));
 
 const double seed = 1;
 
-// Needed for boosted strings ///////////////////////////////////////////////////////////////////
-
-const double dt = 0.2;
-
 // Needed for the case of one z directed boosted string
 
 // Relativistic velocities (c=1) so vx^2+vy^2+vz^2 must be less than 1
@@ -121,29 +67,24 @@ const double v1z = 0;
 
 // Needed for loop collision. Assumes string anti-string pair 1 are x directed strings and pair 2 are z directed strings.
 
-const double pos1s[2] = {10*0.6*sqrt(1-pow(0.4,2)), -25}; // y and z coordinates
-const double pos1a[2] = {-10*0.6*sqrt(1-pow(0.4,2)), 25};
+const double pos1s[2] = {0, -0.25*(nz-1)*dz}; // y and z coordinates
+const double pos1a[2] = {0, 0.25*(nz-1)*dz};
 
-const double pos2s[2] = {25, -10*0.33*sqrt(1-pow(0.4,2))}; // x and y coordinates
-const double pos2a[2] = {-25, 10*0.33*sqrt(1-pow(0.4,2))}; 
+const double pos2s[2] = {0.25*(nx-1)*dx, 0}; // x and y coordinates
+const double pos2a[2] = {-0.25*(nx-1)*dx, 0}; 
 
 
-const double v1s[3] = {0, -0.6*sqrt(1-pow(0.4,2)), 0.6*0.4};
-const double v1a[3] = {0, 0.6*sqrt(1-pow(0.4,2)), -0.6*0.4};
+const double v1s[3] = {0, -0.6*sqrt(1-pow(0.4,2)), -0.6*0.4};
+const double v1a[3] = {0, 0.6*sqrt(1-pow(0.4,2)), 0.6*0.4};
 
-const double v2s[3] = {-0.33*0.4, 0.33*sqrt(1-pow(0.4,2)), 0};
-const double v2a[3] = {0.33*0.4, -0.33*sqrt(1-pow(0.4,2)), 0};
+const double v2s[3] = {0.6*0.4, 0.6*sqrt(1-pow(0.4,2)), 0};
+const double v2a[3] = {-0.6*0.4, -0.6*sqrt(1-pow(0.4,2)), 0};
 
 const double omega = 0.5; // Phase modification parameter. Phase goes to zero more quickly for larger values
 const double Lmod = 25; // Phase modification parameter. Length scale associated with modification
 
 
 int main(){
-
-    // User input to define epsilon
-
-    double eps, lambda;
-    cin >> eps;
     //lambda = dz*(nz-1)/(1-0.25*eps*eps);
 
     Array phi(2,nx,ny,nz,0.0), A(3,nx,ny,nz,0.0);
@@ -188,25 +129,32 @@ int main(){
         }
 
         // Define epsilon and Omega based off amplitude and wavelength. Make sure that epsilon is small for accuracy. Maybe add check that it's at least less than 1.
-	// Calculate elliptic integral of second kind with limit 2*pi (using trap rule) to fix the correct value of Omega
+        // Calculate elliptic integral of second kind with limit 2*pi (using trap rule) to fix the correct value of Omega
 
-	//Omega = 2*pi/lambda;
+        // User input to define epsilon
 
-	ellipint = 0;
-	for(j=0;j<N_ellipint;j++){
+        double eps, lambda;
+        cout << "Enter a value for epsilon between 0 and 1: " << flush;
+        cin >> eps;
+
+	   //Omega = 2*pi/lambda;
+
+        ellipint = 0;
+        for(j=0;j<N_ellipint;j++){
 
             if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	    else{ trap_fac = 1; }
+            else{ trap_fac = 1; }
 
-	    theta = j*2*pi/(N_ellipint-1);
+            theta = j*2*pi/(N_ellipint-1);
 
-	    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*2*pi/(N_ellipint-1);
+            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*2*pi/(N_ellipint-1);
 
-	}
+        }
 
 
 
-	Omega = ellipint/(dz*(nz-1)); // Sets Omega so that string is periodic after z boundaries
+        //Omega = ellipint/(dz*(nz-1)); // Sets Omega so that string is periodic after z boundaries
+        Omega = ellipint/(dz*nz); // This is the correct calculation for a string with periodic z boundary conditions
 
         //cout << 2*eps/Omega << endl;
 
@@ -231,9 +179,9 @@ int main(){
 
         for(k=z0;k<nz;k++){
 
-    	   z = (k-z0)*dz;
+            z = (k-z0)*dz;
 
-    	   sigmaInit = z;
+            sigmaInit = z;
 
             for(i=0;i<nx;i++){
 
@@ -260,31 +208,31 @@ int main(){
 
                 // Calculate the elliptical integrals to find the z coordinate of the string and shift phase by pi/2
 
-		ellipint = 0;
-		for(j=0;j<N_ellipint;j++){
+                ellipint = 0;
+                for(j=0;j<N_ellipint;j++){
 
-		    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	            else{ trap_fac = 1; }
+                    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
+                    else{ trap_fac = 1; }
 
-	            theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
+                    theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
 
-	            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
+                    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
 
-		}
+                }
 
                 distanceSqr1 = pow(x - eps*cos(Omega*sigma1 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
 
-		ellipint = 0;
-		for(j=0;j<N_ellipint;j++){
+                ellipint = 0;
+                for(j=0;j<N_ellipint;j++){
 
-		    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	            else{ trap_fac = 1; }
+                    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
+                    else{ trap_fac = 1; }
 
-	            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
+                    theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
 
-	            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
+                    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
 
-		}
+                }
 
 
                 distanceSqr2 = pow(x - eps*cos(Omega*sigma2 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
@@ -364,35 +312,35 @@ int main(){
                         sigma1 = b - (b-a)/gr;
                         sigma2 = a + (b-a)/gr;
 
-			ellipint = 0;
-			for(j=0;j<N_ellipint;j++){
+                        ellipint = 0;
+                        for(j=0;j<N_ellipint;j++){
 
-			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-	           	    else{ trap_fac = 1; }
+                            if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
+                            else{ trap_fac = 1; }
 
-	            	    theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
+                            theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
 
-	            	    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
+                            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
 
-			}
+                        }
 
 
                         distanceSqr1 = pow(x - eps*cos(Omega*sigma1 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
 
-			ellipint = 0;
-			for(j=0;j<N_ellipint;j++){
+                        ellipint = 0;
+                        for(j=0;j<N_ellipint;j++){
 
-			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
-		            else{ trap_fac = 1; }
+                            if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
+                            else{ trap_fac = 1; }
 
-		            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
+                            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
 
-		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
+                            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
 
-			}
+                        }
 
 
-			distanceSqr2 = pow(x - eps*cos(Omega*sigma2 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
+                        distanceSqr2 = pow(x - eps*cos(Omega*sigma2 - pi/2)/Omega,2) + pow(z - ellipint/Omega,2);
 
                     } else{
 
@@ -594,7 +542,7 @@ int main(){
 
     } else if(ic_type == "simple sine"){
 
-	Array SOR_Fields(SORnx,2,0.0);
+        Array SOR_Fields(SORnx,2,0.0);
 
         double x, y, z, Omega, distance, phiMag, AMag, xdist;
         int pClosest;
@@ -608,53 +556,59 @@ int main(){
 
         }
 
-	Omega = 2*pi/(dz*(nz-1));
+        Omega = 2*pi/(dz*(nz-1));
 
-	int x0 = round((nx-1)/2);
+        // User input to define epsilon
+
+        double eps, lambda;
+        cout << "Enter a value for epsilon between 0 and 1: " << flush;
+        cin >> eps;
+
+        int x0 = round((nx-1)/2);
         int y0 = round((ny-1)/2);
         int z0 = round((nz-1)/2);
 
-	for(i=0;i<nx;i++){
+        for(i=0;i<nx;i++){
 
-	    x = (i-x0)*dx;
+            x = (i-x0)*dx;
 
-	    for(j=0;j<ny;j++){
+            for(j=0;j<ny;j++){
 
-		y = (j-y0)*dy;
+                y = (j-y0)*dy;
 
-		for(k=0;k<nz;k++){
+                for(k=0;k<nz;k++){
 
-		    z = (k-z0)*dz;
+                    z = (k-z0)*dz;
 
-		    xdist = x - eps*sin(Omega*z)/Omega;
+                    xdist = x - eps*sin(Omega*z)/Omega;
 
-		    distance = sqrt( xdist*xdist + y*y ); //x-y plane distance from string
+                    distance = sqrt( xdist*xdist + y*y ); //x-y plane distance from string
 
-		    pClosest = round(distance/SORa);
+                    pClosest = round(distance/SORa);
 
-    		    if(pClosest==0){
+                    if(pClosest==0){
 
-    		      	// 1st order interpolation since only have grid points on one side.
+                        // 1st order interpolation since only have grid points on one side.
 
-     	      		phiMag = ( SOR_Fields(pClosest+1,0)*distance - SOR_Fields(pClosest,0)*(distance-SORa) )/SORa;
-     	      	 	AMag = ( SOR_Fields(pClosest+1,1)*distance - SOR_Fields(pClosest,1)*(distance-SORa) )/SORa;
+                        phiMag = ( SOR_Fields(pClosest+1,0)*distance - SOR_Fields(pClosest,0)*(distance-SORa) )/SORa;
+                        AMag = ( SOR_Fields(pClosest+1,1)*distance - SOR_Fields(pClosest,1)*(distance-SORa) )/SORa;
 
-     	      	    } else if(pClosest<SORnx){
+                    } else if(pClosest<SORnx){
 
-     	      		// 2nd order interpolation
+                        // 2nd order interpolation
 
-     	      		phiMag = ( SOR_Fields(pClosest-1,0)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,0)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
-     		     		   SOR_Fields(pClosest+1,0)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
+                        phiMag = ( SOR_Fields(pClosest-1,0)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,0)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
+     		     		           SOR_Fields(pClosest+1,0)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
 
-     		     	AMag = ( SOR_Fields(pClosest-1,1)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,1)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
-     		     		 SOR_Fields(pClosest+1,1)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
+                        AMag = ( SOR_Fields(pClosest-1,1)*(distance-pClosest*SORa)*(distance-(pClosest+1)*SORa) - 2*SOR_Fields(pClosest,1)*(distance-(pClosest-1)*SORa)*(distance-(pClosest+1)*SORa) +
+     		     		         SOR_Fields(pClosest+1,1)*(distance-(pClosest-1)*SORa)*(distance-pClosest*SORa) )/(2*SORa*SORa);
 
      	      	    } else{
 
-        		phiMag = 1;
+                        phiMag = 1;
 
-     	      		if(g==0){ AMag = 0; }
-        		else{ AMag = n/g; }
+                        if(g==0){ AMag = 0; }
+                        else{ AMag = n/g; }
 
      	      		cout << "Off straight string solution grid" << endl;
 
@@ -1031,14 +985,15 @@ int main(){
 
         // Could probably simplify a lot of this by incorporating all strings into one array. i.e make At(4,nx,ny,nz,0.0)
 
-        Array SOR_Fields(SORnx,2,0.0), At1s(nx,ny,nz,0.0), At1a(nx,ny,nz,0.0), At2s(nx,ny,nz,0.0), At2a(nx,ny,nz,0.0);
+        Array SOR_Fields(SORnx,2,0.0), At1s(nx,ny,nz,0.0), At1a(nx,ny,nz,0.0), At2s(nx,ny,nz,0.0), At2a(nx,ny,nz,0.0), phi1_0(2,nx,ny,nz,0.0), phi2_0(2,nx,ny,nz,0.0),
+              phi1_1(2,nx,ny,nz,0.0), phi2_1(2,nx,ny,nz,0.0), A1(3,nx,ny,nz,0.0), A2(3,nx,ny,nz,0.0);
 
         double distance[4], phiMag[4], AMag[4], xb, yb, zb, xs2s, xs2a, ys1s, ys1a, ys2s, ys2a, zs1s, zs1a, A1s[2], A1a[3], A2s[3], A2a[3], phi1s[2], phi1a[2], phi2s[2], phi2a[2],
-               A1sPatch[3], A1aPatch[3], A2sPatch[3], A2aPatch[3];
-        int pClosest[4], str;
+               A1sPatch[3], A1aPatch[3], A2sPatch[3], A2aPatch[3], phase_fac, norm_fac, phi1Intrp, phi2Intrp, phi1_2[2], phi2_2[2];
+        int pClosest[4], str, ip, im, jp, jm, kp, km;
         dcmplx ci(0.0,1.0), cUnitPos1s, cUnitPos1a, cUnitPos2s, cUnitPos2a, gRot1s, gRot1a, gRot2s, gRot2a;
 
-        string SOR_inputPath = dir_path + "/SOR_Fields.txt";
+        string SOR_inputPath = dir_path + "/Data/SOR_Fields.txt";
 
         ifstream SOR_input (SOR_inputPath.c_str());
 
@@ -1084,13 +1039,13 @@ int main(){
                     xs2s = xb + (gamma2s-1)*(v2s[0]*xb + v2s[1]*yb + v2s[2]*zb)*v2s[0]/v2sMagSqr;
                     xs2a = xb + (gamma2a-1)*(v2a[0]*xb + v2a[1]*yb + v2a[2]*zb)*v2a[1]/v2aMagSqr;
 
-                    ys1s = yb + (gamma1s-1)*(v1s[0]*xb - v1s[1]*yb + v1s[2]*zb)*v1s[1]/v1sMagSqr;
+                    ys1s = yb + (gamma1s-1)*(v1s[0]*xb + v1s[1]*yb + v1s[2]*zb)*v1s[1]/v1sMagSqr;
                     ys1a = yb + (gamma1a-1)*(v1a[0]*xb + v1a[1]*yb + v1a[2]*zb)*v1a[1]/v1aMagSqr;
                     ys2s = yb + (gamma2s-1)*(v2s[0]*xb + v2s[1]*yb + v2s[2]*zb)*v2s[1]/v2sMagSqr;
-                    ys2a = yb - (gamma2a-1)*(v2a[0]*xb - v2a[1]*yb - v2a[2]*zb)*v2a[1]/v2aMagSqr;
+                    ys2a = yb + (gamma2a-1)*(v2a[0]*xb + v2a[1]*yb + v2a[2]*zb)*v2a[1]/v2aMagSqr;
 
-                    zs1s = zb + (gamma1s-1)*(v1s[0]*xb - v1s[1]*yb + v1s[2]*zb)*v1s[2]/v1sMagSqr;
-                    zs1a = zb + (gamma1a-1)*(v1a[0]*xb - v1a[1]*yb + v1a[2]*zb)*v1a[2]/v1aMagSqr;
+                    zs1s = zb + (gamma1s-1)*(v1s[0]*xb + v1s[1]*yb + v1s[2]*zb)*v1s[2]/v1sMagSqr;
+                    zs1a = zb + (gamma1a-1)*(v1a[0]*xb + v1a[1]*yb + v1a[2]*zb)*v1a[2]/v1aMagSqr;
 
                     // Now calculate the distance from the string and interpolate the fields
 
@@ -1142,12 +1097,15 @@ int main(){
                     cUnitPos2s = ( (xs2s - pos2s[0]) + ci*(ys2s - pos2s[1]) )/distance[2];
                     cUnitPos2a = ( -(xs2a - pos2a[0]) + ci*(ys2a - pos2a[1]) )/distance[3];
 
+                    // Could remove the complex part if I'm not modifying the phase for patching at the same time.
+
                     // string 1
 
                     if(zs1s - pos1s[1] == 0){ phi1s[0] = 0; A1s[1] = 0; } // To prevent division by zero
                     else{
 
-                        phi1s[0] = phiMag[0]*real( pow(cUnitPos1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) ); // The pow() is the modification for patching
+                        //phi1s[0] = phiMag[0]*real( pow(cUnitPos1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) ); // The pow() is the modification for patching
+                        phi1s[0] = phiMag[0]*real(cUnitPos1s); // Set phase of field without modification. Modification will come later
                         A1s[1] = -AMag[0]*(zs1s - pos1s[1])/pow(distance[0],2); // y component
 
                     }
@@ -1155,7 +1113,8 @@ int main(){
                     if(ys1s - pos1s[0] == 0){ phi1s[1] = 0; A1s[2] = 0; }
                     else{
 
-                        phi1s[1] = phiMag[0]*imag( pow(cUnitPos1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) );
+                        //phi1s[1] = phiMag[0]*imag( pow(cUnitPos1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) );
+                        phi1s[1] = phiMag[0]*imag(cUnitPos1s);
                         A1s[2] = AMag[0]*(ys1s - pos1s[0])/pow(distance[0],2); // z component
 
                     }
@@ -1165,7 +1124,8 @@ int main(){
                     if(zs1a - pos1a[1] == 0){ phi1a[0] = 0; A1a[1] = 0; }
                     else{
 
-                        phi1a[0] = phiMag[1]*real( pow(cUnitPos1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        //phi1a[0] = phiMag[1]*real( pow(cUnitPos1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        phi1a[0] = phiMag[1]*real(cUnitPos1a);
                         A1a[1] = AMag[1]*(zs1a - pos1a[1])/pow(distance[1],2); // y component
 
                     }
@@ -1173,7 +1133,8 @@ int main(){
                     if(ys1a - pos1a[0] == 0){ phi1a[1] = 0; A1a[2] = 0; }
                     else{
 
-                        phi1a[1] = phiMag[1]*imag( pow(cUnitPos1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        //phi1a[1] = phiMag[1]*imag( pow(cUnitPos1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        phi1a[1] = phiMag[1]*imag(cUnitPos1a);
                         A1a[2] = -AMag[1]*(ys1a - pos1a[0])/pow(distance[1],2); // z component
 
                     }
@@ -1183,7 +1144,8 @@ int main(){
                     if(xs2s - pos2s[0] == 0){ phi2s[0] = 0; A2s[1] = 0; }
                     else{
 
-                        phi2s[0] = phiMag[2]*real( pow(cUnitPos2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        //phi2s[0] = phiMag[2]*real( pow(cUnitPos2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        phi2s[0] = phiMag[2]*real(cUnitPos2s);
                         A2s[1] = AMag[2]*(xs2s - pos2s[0])/pow(distance[2],2); // y component
 
                     }
@@ -1191,7 +1153,8 @@ int main(){
                     if(ys2s - pos2s[1] == 0){ phi2s[1] = 0; A2s[0] = 0; }
                     else{
 
-                        phi2s[1] = phiMag[2]*imag( pow(cUnitPos2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        //phi2s[1] = phiMag[2]*imag( pow(cUnitPos2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        phi2s[1] = phiMag[2]*imag(cUnitPos2s);
                         A2s[0] = -AMag[2]*(ys2s - pos2s[1])/pow(distance[2],2); // x component
 
                     }
@@ -1201,7 +1164,8 @@ int main(){
                     if(xs2a - pos2a[0] == 0){ phi2a[0] = 0; A2a[1] = 0; }
                     else{
 
-                        phi2a[0] = phiMag[3]*real( pow(cUnitPos2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        //phi2a[0] = phiMag[3]*real( pow(cUnitPos2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        phi2a[0] = phiMag[3]*real(cUnitPos2a);
                         A2a[1] = -AMag[3]*(xs2a - pos2a[0])/pow(distance[3],2); // y component
 
                     }
@@ -1209,50 +1173,128 @@ int main(){
                     if(ys2a - pos2a[1] == 0){ phi2a[1] = 0; A2a[0] = 0; }
                     else{
 
-                        phi2a[1] = phiMag[3]*imag( pow(cUnitPos2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        //phi2a[1] = phiMag[3]*imag( pow(cUnitPos2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        phi2a[1] = phiMag[3]*imag(cUnitPos2a);
                         A2a[0] = AMag[3]*(ys2a - pos2a[1])/pow(distance[3],2); // x component
 
                     }
 
-                    // Now need to transform the gauge fields as one-forms under the Lorentz transformation. It is the inverse of the coordinate transformation but no difference at t=0.
+                    // Patch each string - antistring pair together and modify so that the fields are regular at the periodic boundary conditions
+                    // _0 is the crude patching that doesn't account for the boundary conditions
+                    // These are the x directed strings
+
+                    phi1_0(0,i,j,k) = phi1s[0]*phi1a[0] - phi1s[1]*phi1a[1];
+                    phi1_0(1,i,j,k) = phi1s[1]*phi1a[0] + phi1s[0]*phi1a[1];
+
+                    // Modify the phase so that the imaginary component is zero at the boundaries and normalise so that the magnitude is unchanged
+
+                    phase_fac = ( 1 - pow(yb/(y0*dy),2) )*( 1 - pow(zb/(z0*dz),2) );
+
+                    if(pow(phi1_0(0,i,j,k),2) + pow(phi1_0(1,i,j,k)*phase_fac,2) == 0){
+
+                        phi1_0(0,i,j,k) = phi1_0(1,i,j,k);
+                        phi1_0(1,i,j,k) = 0;
+
+                    } else{
+
+                        norm_fac = sqrt( (pow(phi1_0(0,i,j,k),2) + pow(phi1_0(1,i,j,k),2))/(pow(phi1_0(0,i,j,k),2) + pow(phi1_0(1,i,j,k)*phase_fac,2)) );
+                        phi1_0(0,i,j,k) = norm_fac*phi1_0(0,i,j,k);
+                        phi1_0(1,i,j,k) = norm_fac*phase_fac*phi1_0(1,i,j,k);
+
+                    }
+
+                    // phi1(0,i,j,k) = phi1_0[0];
+                    // phi1(1,i,j,k) = phi1_0[1];
+
+                    for(comp=0;comp<3;comp++){
+
+                        // Transform the gauge fields as one-forms under the lorentz transformation
+
+                        A1sPatch[comp] = (gamma1s-1)*(v1s[1]*A1s[1] + v1s[2]*A1s[2])*v1s[comp]/v1sMagSqr;
+                        A1aPatch[comp] = (gamma1a-1)*(v1a[1]*A1a[1] + v1a[2]*A1a[2])*v1a[comp]/v1aMagSqr;
+
+                        // Patch the string - antistring pair together and multiply by phasefac so regularity is preserved at the boundaries
+                        // Possibly not necessary for the component parallel to the string under some symmetry conditions. No equivalent of normalising the magnitude here 
+                        A1(comp,i,j,k) = (A1sPatch[comp] + A1aPatch[comp])*phase_fac;
+
+                    }
+
+                    // Do the same for the second string - antistring pair (z directed)
+
+                    phi2_0(0,i,j,k) = phi2s[0]*phi2a[0] - phi2s[1]*phi2a[1];
+                    phi2_0(1,i,j,k) = phi2s[1]*phi2a[0] + phi2s[0]*phi2a[1];
+
+                    phase_fac = ( 1 - pow(xb/(x0*dx),2) )*( 1 - pow(yb/(y0*dy),2) );
+
+                    if(pow(phi2_0(0,i,j,k),2) + pow(phi2_0(1,i,j,k)*phase_fac,2) == 0){
+
+                        phi2_0(0,i,j,k) = phi2_0(1,i,j,k);
+                        phi2_0(1,i,j,k) = 0;
+
+                    } else{
+                    
+                        norm_fac = sqrt( (pow(phi2_0(0,i,j,k),2) + pow(phi2_0(1,i,j,k),2))/(pow(phi2_0(0,i,j,k),2) + pow(phi2_0(1,i,j,k)*phase_fac,2)) );
+                        phi2_0(0,i,j,k) = norm_fac*phi2_0(0,i,j,k);
+                        phi2_0(1,i,j,k) = norm_fac*phase_fac*phi2_0(1,i,j,k);
+
+                    }
+
+                    // phi2(0,i,j,k) = phi2_0[0];
+                    // phi2(1,i,j,k) = phi2_0[1];
+
+                    for(comp=0;comp<3;comp++){
+
+                        A2sPatch[comp] = (gamma2s-1)*(v2s[0]*A2s[0] + v2s[1]*A2s[1])*v2s[comp]/v2sMagSqr;
+                        A2aPatch[comp] = (gamma2a-1)*(v2a[0]*A2a[0] + v2a[1]*A2a[1])*v2a[comp]/v2aMagSqr;
+
+                        A2(comp,i,j,k) = (A2sPatch[comp] + A2aPatch[comp])*phase_fac;
+
+                    }
+
+
+                    // At is needed for the gauge transformation at the next time step. Gauge transformation sets At(t=0) to zero without affecting Ai(t=0) but need to calculate as it
+                    // will have an effect on Ai(t=dt). Non-zero At is created by the Lorentz transformation.
 
                     At1s(i,j,k) = -gamma1s*(v1s[1]*A1s[1] + v1s[2]*A1s[2]);
                     At1a(i,j,k) = -gamma1a*(v1a[1]*A1a[1] + v1a[2]*A1a[2]);
                     At2s(i,j,k) = -gamma2s*(v2s[0]*A2s[0] + v2s[1]*A2s[1]);
                     At2a(i,j,k) = -gamma2a*(v2a[0]*A2a[0] + v2a[1]*A2a[1]);
 
-                    // At is needed for the gauge transformation at the next time step. Gauge transformation sets At(t=0) to zero without affecting Ai(t=0) but will have an effect on Ai(t=dt)
+                    
 
-                    for(comp=0;comp<3;comp++){ 
+                    // for(comp=0;comp<3;comp++){ 
 
-                        A1sPatch[comp] = (gamma1s-1)*(v1s[1]*A1s[1] + v1s[2]*A1s[2])*v1s[comp]/v1sMagSqr;
-                        A1aPatch[comp] = (gamma1a-1)*(v1a[1]*A1a[1] + v1a[2]*A1a[2])*v1a[comp]/v1aMagSqr;
-                        A2sPatch[comp] = (gamma2s-1)*(v2s[0]*A2s[0] + v2s[1]*A2s[1])*v2s[comp]/v2sMagSqr;
-                        A2aPatch[comp] = (gamma2a-1)*(v2a[0]*A2a[0] + v2a[1]*A2a[1])*v2a[comp]/v2aMagSqr; 
+                    //     A1sPatch[comp] = (gamma1s-1)*(v1s[1]*A1s[1] + v1s[2]*A1s[2])*v1s[comp]/v1sMagSqr;
+                    //     A1aPatch[comp] = (gamma1a-1)*(v1a[1]*A1a[1] + v1a[2]*A1a[2])*v1a[comp]/v1aMagSqr;
+                    //     A2sPatch[comp] = (gamma2s-1)*(v2s[0]*A2s[0] + v2s[1]*A2s[1])*v2s[comp]/v2sMagSqr;
+                    //     A2aPatch[comp] = (gamma2a-1)*(v2a[0]*A2a[0] + v2a[1]*A2a[1])*v2a[comp]/v2aMagSqr;
 
-                        // Patch the strings gauge fields together
+                    //     // Patch the strings gauge fields together
 
-                        A(comp,i,j,k) = A1sPatch[comp] + A1aPatch[comp] + A2sPatch[comp] + A2aPatch[comp];
+                    //     A(comp,i,j,k) = A1sPatch[comp] + A1aPatch[comp] + A2sPatch[comp] + A2aPatch[comp];
 
-                    }
+                    // }
 
                     // Patch the strings scalar fields together
 
-                    phi(0,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[0] - phi1s[0]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[0]
-                                 - phi1s[1]*phi1a[0]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[1]*phi2s[1]*phi2a[1];
+                    // phi(0,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[0] - phi1s[0]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[0]
+                    //              - phi1s[1]*phi1a[0]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[1]*phi2s[1]*phi2a[1];
 
-                    phi(1,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[1] + phi1s[0]*phi1a[0]*phi2s[1]*phi2a[0] + phi1s[0]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[0]*phi2s[0]*phi2a[0]
-                                 - phi1s[1]*phi1a[1]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[1];
+                    // phi(1,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[1] + phi1s[0]*phi1a[0]*phi2s[1]*phi2a[0] + phi1s[0]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[0]*phi2s[0]*phi2a[0]
+                    //              - phi1s[1]*phi1a[1]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[1];
 
-                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+                    // ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+
+                    //test1s << phi1s[0] << " " << phi1s[1] << endl;
+                    //test1a << phi1a[0] << " " << phi1a[1] << endl;
+                    //test2s << phi2s[0] << " " << phi2s[1] << endl;
+                    //test2a << phi2a[0] << " " << phi2a[1] << endl;
 
                 }
             }
         }
 
-
-        // Now set generate the field values at the next timestep
-
+        // Apply first set of interpolation so that magnitude of fields are continuous across the periodic boundary conditions
 
         for(i=0;i<nx;i++){
 
@@ -1264,7 +1306,97 @@ int main(){
 
                 for(k=0;k<nz;k++){
 
+                    zb = (k-z0)*dz;
+
+
+                    // Define the interpolation functions
+
+                    phi1Intrp = ( sqrt(pow(phi1_0(0,i,ny-1,k),2) + pow(phi1_0(1,i,ny-1,k),2)) - sqrt(pow(phi1_0(0,i,0,k),2) + pow(phi1_0(1,i,0,k),2)) )*(yb+y0*dy)/(2*y0*dy)
+                                + sqrt(pow(phi1_0(0,i,0,k),2) + pow(phi1_0(1,i,0,k),2));
+
+                    phi2Intrp = ( sqrt(pow(phi2_0(0,nx-1,j,k),2) + pow(phi2_0(1,nx-1,j,k),2)) - sqrt(pow(phi2_0(0,0,j,k),2) + pow(phi2_0(1,0,j,k),2)) )*(xb+x0*dx)/(2*x0*dx)
+                                + sqrt(pow(phi2_0(0,0,j,k),2) + pow(phi2_0(1,0,j,k),2));
+
+                    phi1_1(0,i,j,k) = phi1_0(0,i,j,k)/phi1Intrp;
+                    phi1_1(1,i,j,k) = phi1_0(1,i,j,k)/phi1Intrp;
+
+                    phi2_1(0,i,j,k) = phi2_0(0,i,j,k)/phi2Intrp;
+                    phi2_1(1,i,j,k) = phi2_0(1,i,j,k)/phi2Intrp;
+
+                }
+
+            }
+
+        }
+
+        // Apply the second set of interpolations so that the other boundary values are modified too.
+
+        for(i=0;i<nx;i++){
+
+            xb = (i-x0)*dx;
+
+            for(j=0;j<ny;j++){
+
+                yb = (j-y0)*dy;
+
+                for(k=0;k<nz;k++){
+
+                    zb = (k-z0)*dz;
+
+
+                    // Define the interpolation functions
+
+                    phi1Intrp = ( sqrt(pow(phi1_1(0,i,j,nz-1),2) + pow(phi1_1(1,i,j,nz-1),2)) - sqrt(pow(phi1_1(0,i,j,0),2) + pow(phi1_1(1,i,j,0),2)) )*(zb+z0*dz)/(2*z0*dz)
+                                + sqrt(pow(phi1_1(0,i,j,0),2) + pow(phi1_1(1,i,j,0),2));
+
+                    phi2Intrp = ( sqrt(pow(phi2_1(0,i,ny-1,k),2) + pow(phi2_1(1,i,ny-1,k),2)) - sqrt(pow(phi2_1(0,i,0,k),2) + pow(phi2_1(1,i,0,k),2)) )*(yb+y0*dy)/(2*y0*dy)
+                                + sqrt(pow(phi2_1(0,i,0,k),2) + pow(phi2_1(1,i,0,k),2));
+
+
+                    phi1_2[0] = phi1_1(0,i,j,k)/phi1Intrp;
+                    phi1_2[1] = phi1_1(1,i,j,k)/phi1Intrp;
+
+                    phi2_2[0] = phi2_1(0,i,j,k)/phi2Intrp;
+                    phi2_2[1] = phi2_1(1,i,j,k)/phi2Intrp;
+
+                    // Now patch both string - antistring pairs together
+
+                    phi(0,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
+                    phi(1,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
+
+                    for(comp=0;comp<3;comp++){ A(comp,i,j,k) = A1(comp,i,j,k) + A2(comp,i,j,k); }
+
+                    // Output the field values at the initial time.
+
+                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+
+                }
+
+            }
+
+        }
+
+
+        // Now generate the field values at the next timestep
+
+
+        for(i=0;i<nx;i++){
+
+            xb = (i-x0)*dx;
+            ip = (i+1+nx)%nx;
+            im = (i-1+nx)%nx;
+
+            for(j=0;j<ny;j++){
+
+                yb = (j-y0)*dy;
+                jp = (j+1+ny)%ny;
+                jm = (j-1+ny)%ny;
+
+                for(k=0;k<nz;k++){
+
                     zb = (k-z0)*dy;
+                    kp = (k+1+nz)%nz;
+                    km = (k-1+nz)%nz;
 
 
                     // Firstly need to calculate what these positions correspond to in the frame with a stationary string at t=0. Don't care about z coordinate as symmetric
@@ -1273,13 +1405,13 @@ int main(){
                     xs2s = xb + (gamma2s-1)*(v2s[0]*xb + v2s[1]*yb + v2s[2]*zb)*v2s[0]/v2sMagSqr - gamma2s*v2s[0]*dt;
                     xs2a = xb + (gamma2a-1)*(v2a[0]*xb + v2a[1]*yb + v2a[2]*zb)*v2a[1]/v2aMagSqr - gamma2a*v2a[0]*dt;
 
-                    ys1s = yb + (gamma1s-1)*(v1s[0]*xb - v1s[1]*yb + v1s[2]*zb)*v1s[1]/v1sMagSqr - gamma1s*v1s[1]*dt;
+                    ys1s = yb + (gamma1s-1)*(v1s[0]*xb + v1s[1]*yb + v1s[2]*zb)*v1s[1]/v1sMagSqr - gamma1s*v1s[1]*dt;
                     ys1a = yb + (gamma1a-1)*(v1a[0]*xb + v1a[1]*yb + v1a[2]*zb)*v1a[1]/v1aMagSqr - gamma1a*v1a[1]*dt;
                     ys2s = yb + (gamma2s-1)*(v2s[0]*xb + v2s[1]*yb + v2s[2]*zb)*v2s[1]/v2sMagSqr - gamma2s*v2s[1]*dt;
-                    ys2a = yb - (gamma2a-1)*(v2a[0]*xb - v2a[1]*yb - v2a[2]*zb)*v2a[1]/v2aMagSqr - gamma2a*v2a[1]*dt;
+                    ys2a = yb + (gamma2a-1)*(v2a[0]*xb + v2a[1]*yb + v2a[2]*zb)*v2a[1]/v2aMagSqr - gamma2a*v2a[1]*dt;
 
-                    zs1s = zb + (gamma1s-1)*(v1s[0]*xb - v1s[1]*yb + v1s[2]*zb)*v1s[2]/v1sMagSqr - gamma1s*v1s[2]*dt;
-                    zs1a = zb + (gamma1a-1)*(v1a[0]*xb - v1a[1]*yb + v1a[2]*zb)*v1a[2]/v1aMagSqr - gamma1a*v1a[2]*dt;
+                    zs1s = zb + (gamma1s-1)*(v1s[0]*xb + v1s[1]*yb + v1s[2]*zb)*v1s[2]/v1sMagSqr - gamma1s*v1s[2]*dt;
+                    zs1a = zb + (gamma1a-1)*(v1a[0]*xb + v1a[1]*yb + v1a[2]*zb)*v1a[2]/v1aMagSqr - gamma1a*v1a[2]*dt;
 
                     // Now calculate the distance from the string and interpolate the fields
 
@@ -1343,7 +1475,8 @@ int main(){
                     if(zs1s - pos1s[1] == 0){ phi1s[0] = 0; A1s[1] = 0; } // To prevent division by zero
                     else{
 
-                        phi1s[0] = phiMag[0]*real( pow(cUnitPos1s*gRot1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) ); // The pow() is the modification for patching
+                        //phi1s[0] = phiMag[0]*real( pow(cUnitPos1s*gRot1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) ); // The pow() is the modification for patching
+                        phi1s[0] = phiMag[0]*real(cUnitPos1s*gRot1s);
                         A1s[1] = -AMag[0]*(zs1s - pos1s[1])/pow(distance[0],2); // y component
 
                     }
@@ -1351,7 +1484,8 @@ int main(){
                     if(ys1s - pos1s[0] == 0){ phi1s[1] = 0; A1s[2] = 0; }
                     else{
 
-                        phi1s[1] = phiMag[0]*imag( pow(cUnitPos1s*gRot1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) );
+                        //phi1s[1] = phiMag[0]*imag( pow(cUnitPos1s*gRot1s, 0.5*( 1 - tanh(omega*(distance[0] - Lmod)) )) );
+                        phi1s[1] = phiMag[0]*imag(cUnitPos1s*gRot1s);
                         A1s[2] = AMag[0]*(ys1s - pos1s[0])/pow(distance[0],2); // z component
 
                     }
@@ -1361,7 +1495,8 @@ int main(){
                     if(zs1a - pos1a[1] == 0){ phi1a[0] = 0; A1a[1] = 0; }
                     else{
 
-                        phi1a[0] = phiMag[1]*real( pow(cUnitPos1a*gRot1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        //phi1a[0] = phiMag[1]*real( pow(cUnitPos1a*gRot1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        phi1a[0] = phiMag[1]*real(cUnitPos1a*gRot1a);
                         A1a[1] = AMag[1]*(zs1a - pos1a[1])/pow(distance[1],2); // y component
 
                     }
@@ -1369,7 +1504,8 @@ int main(){
                     if(ys1a - pos1a[0] == 0){ phi1a[1] = 0; A1a[2] = 0; }
                     else{
 
-                        phi1a[1] = phiMag[1]*imag( pow(cUnitPos1a*gRot1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        //phi1a[1] = phiMag[1]*imag( pow(cUnitPos1a*gRot1a, 0.5*( 1 - tanh(omega*(distance[1] - Lmod)) )) );
+                        phi1a[1] = phiMag[1]*imag(cUnitPos1a*gRot1a);
                         A1a[2] = -AMag[1]*(ys1a - pos1a[0])/pow(distance[1],2); // z component
 
                     }
@@ -1379,7 +1515,8 @@ int main(){
                     if(xs2s - pos2s[0] == 0){ phi2s[0] = 0; A2s[1] = 0; }
                     else{
 
-                        phi2s[0] = phiMag[2]*real( pow(cUnitPos2s*gRot2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        //phi2s[0] = phiMag[2]*real( pow(cUnitPos2s*gRot2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        phi2s[0] = phiMag[2]*real(cUnitPos2s*gRot2s);
                         A2s[1] = AMag[2]*(xs2s - pos2s[0])/pow(distance[2],2); // y component
 
                     }
@@ -1387,7 +1524,8 @@ int main(){
                     if(ys2s - pos2s[1] == 0){ phi2s[1] = 0; A2s[0] = 0; }
                     else{
 
-                        phi2s[1] = phiMag[2]*imag( pow(cUnitPos2s*gRot2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        //phi2s[1] = phiMag[2]*imag( pow(cUnitPos2s*gRot2s, 0.5*( 1 - tanh(omega*(distance[2] - Lmod)) )) );
+                        phi2s[1] = phiMag[2]*imag(cUnitPos2s*gRot2s);
                         A2s[0] = -AMag[2]*(ys2s - pos2s[1])/pow(distance[2],2); // x component
 
                     }
@@ -1397,7 +1535,8 @@ int main(){
                     if(xs2a - pos2a[0] == 0){ phi2a[0] = 0; A2a[1] = 0; }
                     else{
 
-                        phi2a[0] = phiMag[3]*real( pow(cUnitPos2a*gRot2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        //phi2a[0] = phiMag[3]*real( pow(cUnitPos2a*gRot2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        phi2a[0] = phiMag[3]*real(cUnitPos2a*gRot2a);
                         A2a[1] = -AMag[3]*(xs2a - pos2a[0])/pow(distance[3],2); // y component
 
                     }
@@ -1405,7 +1544,8 @@ int main(){
                     if(ys2a - pos2a[1] == 0){ phi2a[1] = 0; A2a[0] = 0; }
                     else{
 
-                        phi2a[1] = phiMag[3]*imag( pow(cUnitPos2a*gRot2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        //phi2a[1] = phiMag[3]*imag( pow(cUnitPos2a*gRot2a, 0.5*( 1 - tanh(omega*(distance[3] - Lmod)) )) );
+                        phi2a[1] = phiMag[3]*imag(cUnitPos2a*gRot2a);
                         A2a[0] = AMag[3]*(ys2a - pos2a[1])/pow(distance[3],2); // x component
 
                     }
@@ -1425,99 +1565,174 @@ int main(){
 
                     // x components
 
-                    if(i==0){
-
-                        A1sPatch[0] += -dt*( At1s(i+1,j,k) - At1s(nx-1,j,k) )/(2*dx);
-                        A1aPatch[0] += -dt*( At1a(i+1,j,k) - At1a(nx-1,j,k) )/(2*dx);
-                        A2sPatch[0] += -dt*( At2s(i+1,j,k) - At2s(nx-1,j,k) )/(2*dx);
-                        A2aPatch[0] += -dt*( At2a(i+1,j,k) - At2a(nx-1,j,k) )/(2*dx);
-
-                    } else if(i==nx-1){
-
-                        A1sPatch[0] += -dt*( At1s(0,j,k) - At1s(i-1,j,k) )/(2*dx);
-                        A1aPatch[0] += -dt*( At1a(0,j,k) - At1a(i-1,j,k) )/(2*dx);
-                        A2sPatch[0] += -dt*( At2s(0,j,k) - At2s(i-1,j,k) )/(2*dx);
-                        A2aPatch[0] += -dt*( At2a(0,j,k) - At2a(i-1,j,k) )/(2*dx);
-
-                    } else{
-
-                        A1sPatch[0] += -dt*( At1s(i+1,j,k) - At1s(i-1,j,k) )/(2*dx);
-                        A1aPatch[0] += -dt*( At1a(i+1,j,k) - At1a(i-1,j,k) )/(2*dx);
-                        A2sPatch[0] += -dt*( At2s(i+1,j,k) - At2s(i-1,j,k) )/(2*dx);
-                        A2aPatch[0] += -dt*( At2a(i+1,j,k) - At2a(i-1,j,k) )/(2*dx);
-
-                    }
+                    A1sPatch[0] += -dt*( At1s(ip,j,k) - At1s(im,j,k) )/(2*dx);
+                    A1aPatch[0] += -dt*( At1a(ip,j,k) - At1a(im,j,k) )/(2*dx);
+                    A2sPatch[0] += -dt*( At2s(ip,j,k) - At2s(im,j,k) )/(2*dx);
+                    A2aPatch[0] += -dt*( At2a(ip,j,k) - At2a(im,j,k) )/(2*dx);
 
                     // y components
 
-                    if(j==0){
-
-                        A1sPatch[1] += -dt*( At1s(i,j+1,k) - At1s(i,ny-1,k) )/(2*dy);
-                        A1aPatch[1] += -dt*( At1a(i,j+1,k) - At1a(i,ny-1,k) )/(2*dy);
-                        A2sPatch[1] += -dt*( At2s(i,j+1,k) - At2s(i,ny-1,k) )/(2*dy);
-                        A2aPatch[1] += -dt*( At2a(i,j+1,k) - At2a(i,ny-1,k) )/(2*dy);
-
-                    } else if(j==ny-1){
-
-                        A1sPatch[1] += -dt*( At1s(i,0,k) - At1s(i,j-1,k) )/(2*dy);
-                        A1aPatch[1] += -dt*( At1a(i,0,k) - At1a(i,j-1,k) )/(2*dy);
-                        A2sPatch[1] += -dt*( At2s(i,0,k) - At2s(i,j-1,k) )/(2*dy);
-                        A2aPatch[1] += -dt*( At2a(i,0,k) - At2a(i,j-1,k) )/(2*dy);
-
-                    } else{
-
-                        A1sPatch[1] += -dt*( At1s(i,j+1,k) - At1s(i,j-1,k) )/(2*dy);
-                        A1aPatch[1] += -dt*( At1a(i,j+1,k) - At1a(i,j-1,k) )/(2*dy);
-                        A2sPatch[1] += -dt*( At2s(i,j+1,k) - At2s(i,j-1,k) )/(2*dy);
-                        A2aPatch[1] += -dt*( At2a(i,j+1,k) - At2a(i,j-1,k) )/(2*dy);
-
-                    }
+                    A1sPatch[1] += -dt*( At1s(i,jp,k) - At1s(i,jm,k) )/(2*dy);
+                    A1aPatch[1] += -dt*( At1a(i,jp,k) - At1a(i,jm,k) )/(2*dy);
+                    A2sPatch[1] += -dt*( At2s(i,jp,k) - At2s(i,jm,k) )/(2*dy);
+                    A2aPatch[1] += -dt*( At2a(i,jp,k) - At2a(i,jm,k) )/(2*dy);
 
                     // z components
 
-                    if(k==0){
+                    A1sPatch[2] += -dt*( At1s(i,j,kp) - At1s(i,j,km) )/(2*dz);
+                    A1aPatch[2] += -dt*( At1a(i,j,kp) - At1a(i,j,km) )/(2*dz);
+                    A2sPatch[2] += -dt*( At2s(i,j,kp) - At2s(i,j,km) )/(2*dz);
+                    A2aPatch[2] += -dt*( At2a(i,j,kp) - At2a(i,j,km) )/(2*dz);
 
-                        A1sPatch[2] += -dt*( At1s(i,j,k+1) - At1s(i,j,nz-1) )/(2*dz);
-                        A1aPatch[2] += -dt*( At1a(i,j,k+1) - At1a(i,j,nz-1) )/(2*dz);
-                        A2sPatch[2] += -dt*( At2s(i,j,k+1) - At2s(i,j,nz-1) )/(2*dz);
-                        A2aPatch[2] += -dt*( At2a(i,j,k+1) - At2a(i,j,nz-1) )/(2*dz);
+                    // Patch each string - antistring pair together and modify so that the fields are regular at the periodic boundary conditions
+                    // _0 is the crude patching that doesn't account for the boundary conditions
+                    // These are the x directed strings
 
-                    } else if(k==nz-1){
+                    phi1_0(0,i,j,k) = phi1s[0]*phi1a[0] - phi1s[1]*phi1a[1];
+                    phi1_0(1,i,j,k) = phi1s[1]*phi1a[0] + phi1s[0]*phi1a[1];
 
-                        A1sPatch[2] += -dt*( At1s(i,j,0) - At1s(i,j,k-1) )/(2*dz);
-                        A1aPatch[2] += -dt*( At1a(i,j,0) - At1a(i,j,k-1) )/(2*dz);
-                        A2sPatch[2] += -dt*( At2s(i,j,0) - At2s(i,j,k-1) )/(2*dz);
-                        A2aPatch[2] += -dt*( At2a(i,j,0) - At2a(i,j,k-1) )/(2*dz);
+                    // Modify the phase so that the imaginary component is zero at the boundaries and normalise so that the magnitude is unchanged
+
+                    phase_fac = ( 1 - pow(yb/(y0*dy),2) )*( 1 - pow(zb/(z0*dz),2) );
+
+                    if(pow(phi1_0(0,i,j,k),2) + pow(phi1_0(1,i,j,k)*phase_fac,2) == 0){
+
+                        phi1_0(0,i,j,k) = phi1_0(1,i,j,k);
+                        phi1_0(1,i,j,k) = 0;
 
                     } else{
 
-                        A1sPatch[2] += -dt*( At1s(i,j,k+1) - At1s(i,j,k-1) )/(2*dz);
-                        A1aPatch[2] += -dt*( At1a(i,j,k+1) - At1a(i,j,k-1) )/(2*dz);
-                        A2sPatch[2] += -dt*( At2s(i,j,k+1) - At2s(i,j,k-1) )/(2*dz);
-                        A2aPatch[2] += -dt*( At2a(i,j,k+1) - At2a(i,j,k-1) )/(2*dz);
+                        norm_fac = sqrt( (pow(phi1_0(0,i,j,k),2) + pow(phi1_0(1,i,j,k),2))/(pow(phi1_0(0,i,j,k),2) + pow(phi1_0(1,i,j,k)*phase_fac,2)) );
+                        phi1_0(0,i,j,k) = norm_fac*phi1_0(0,i,j,k);
+                        phi1_0(1,i,j,k) = norm_fac*phase_fac*phi1_0(1,i,j,k);
 
                     }
 
+                    for(comp=0;comp<3;comp++){ A1(comp,i,j,k) = (A1sPatch[comp] + A1aPatch[comp])*phase_fac; }
 
-                    // Patch the strings together
+                    // Do the same for the second string - antistring pair (z directed)
 
-                    phi(0,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[0] - phi1s[0]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[0]
-                                 - phi1s[1]*phi1a[0]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[1]*phi2s[1]*phi2a[1];
+                    phi2_0(0,i,j,k) = phi2s[0]*phi2a[0] - phi2s[1]*phi2a[1];
+                    phi2_0(1,i,j,k) = phi2s[1]*phi2a[0] + phi2s[0]*phi2a[1];
 
-                    phi(1,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[1] + phi1s[0]*phi1a[0]*phi2s[1]*phi2a[0] + phi1s[0]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[0]*phi2s[0]*phi2a[0]
-                                 - phi1s[1]*phi1a[1]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[1];
+                    phase_fac = ( 1 - pow(xb/(x0*dx),2) )*( 1 - pow(yb/(y0*dy),2) );
 
-                    for(comp=0;comp<3;comp++){ A(comp,i,j,k) = A1sPatch[comp] + A1aPatch[comp] + A2sPatch[comp] + A2aPatch[comp]; }
+                    if(pow(phi2_0(0,i,j,k),2) + pow(phi2_0(1,i,j,k)*phase_fac,2) == 0){
 
-                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+                        phi2_0(0,i,j,k) = phi2_0(1,i,j,k);
+                        phi2_0(1,i,j,k) = 0;
 
-                    test1s << phi1s[0] << " " << phi1s[1] << endl;
-                    test1a << phi1a[0] << " " << phi1a[1] << endl;
-                    test2s << phi2s[0] << " " << phi2s[1] << endl;
-                    test2a << phi2a[0] << " " << phi2a[1] << endl;
+                    } else{
+
+                        norm_fac = sqrt( (pow(phi2_0(0,i,j,k),2) + pow(phi2_0(1,i,j,k),2))/(pow(phi2_0(0,i,j,k),2) + pow(phi2_0(1,i,j,k)*phase_fac,2)) );
+                        phi2_0(0,i,j,k) = norm_fac*phi2_0(0,i,j,k);
+                        phi2_0(1,i,j,k) = norm_fac*phase_fac*phi2_0(1,i,j,k);
+
+                    }
+
+                    for(comp=0;comp<3;comp++){ A2(comp,i,j,k) = (A2sPatch[comp] + A2aPatch[comp])*phase_fac; }
+
+
+                    // // Patch the strings together
+
+                    // phi(0,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[0] - phi1s[0]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[0]
+                    //              - phi1s[1]*phi1a[0]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[1]*phi2s[1]*phi2a[1];
+
+                    // phi(1,i,j,k) = phi1s[0]*phi1a[0]*phi2s[0]*phi2a[1] + phi1s[0]*phi1a[0]*phi2s[1]*phi2a[0] + phi1s[0]*phi1a[1]*phi2s[0]*phi2a[0] + phi1s[1]*phi1a[0]*phi2s[0]*phi2a[0]
+                    //              - phi1s[1]*phi1a[1]*phi2s[1]*phi2a[0] - phi1s[1]*phi1a[1]*phi2s[0]*phi2a[1] - phi1s[1]*phi1a[0]*phi2s[1]*phi2a[1] - phi1s[0]*phi1a[1]*phi2s[1]*phi2a[1];
+
+                    // for(comp=0;comp<3;comp++){ A(comp,i,j,k) = A1sPatch[comp] + A1aPatch[comp] + A2sPatch[comp] + A2aPatch[comp]; }
+
+                    // ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+
+                    // test1s << phi1s[0] << " " << phi1s[1] << endl;
+                    // test1a << phi1a[0] << " " << phi1a[1] << endl;
+                    // test2s << phi2s[0] << " " << phi2s[1] << endl;
+                    // test2a << phi2a[0] << " " << phi2a[1] << endl;
 
                 }
             }
+        }
+
+        // Apply first set of interpolation so that magnitude of fields are continuous across the periodic boundary conditions
+
+        for(i=0;i<nx;i++){
+
+            xb = (i-x0)*dx;
+
+            for(j=0;j<ny;j++){
+
+                yb = (j-y0)*dy;
+
+                for(k=0;k<nz;k++){
+
+                    zb = (k-z0)*dz;
+
+
+                    // Define the interpolation functions
+
+                    phi1Intrp = ( sqrt(pow(phi1_0(0,i,ny-1,k),2) + pow(phi1_0(1,i,ny-1,k),2)) - sqrt(pow(phi1_0(0,i,0,k),2) + pow(phi1_0(1,i,0,k),2)) )*(yb+y0*dy)/(2*y0*dy)
+                                + sqrt(pow(phi1_0(0,i,0,k),2) + pow(phi1_0(1,i,0,k),2));
+
+                    phi2Intrp = ( sqrt(pow(phi2_0(0,nx-1,j,k),2) + pow(phi2_0(1,nx-1,j,k),2)) - sqrt(pow(phi2_0(0,0,j,k),2) + pow(phi2_0(1,0,j,k),2)) )*(xb+x0*dx)/(2*x0*dx)
+                                + sqrt(pow(phi2_0(0,0,j,k),2) + pow(phi2_0(1,0,j,k),2));
+
+                    phi1_1(0,i,j,k) = phi1_0(0,i,j,k)/phi1Intrp;
+                    phi1_1(1,i,j,k) = phi1_0(1,i,j,k)/phi1Intrp;
+
+                    phi2_1(0,i,j,k) = phi2_0(0,i,j,k)/phi2Intrp;
+                    phi2_1(1,i,j,k) = phi2_0(1,i,j,k)/phi2Intrp;
+
+                }
+
+            }
+
+        }
+
+        // Apply the second set of interpolations so that the other boundary values are modified too.
+
+        for(i=0;i<nx;i++){
+
+            xb = (i-x0)*dx;
+
+            for(j=0;j<ny;j++){
+
+                yb = (j-y0)*dy;
+
+                for(k=0;k<nz;k++){
+
+                    zb = (k-z0)*dz;
+
+
+                    // Define the interpolation functions
+
+                    phi1Intrp = ( sqrt(pow(phi1_1(0,i,j,nz-1),2) + pow(phi1_1(1,i,j,nz-1),2)) - sqrt(pow(phi1_1(0,i,j,0),2) + pow(phi1_1(1,i,j,0),2)) )*(zb+z0*dz)/(2*z0*dz)
+                                + sqrt(pow(phi1_1(0,i,j,0),2) + pow(phi1_1(1,i,j,0),2));
+
+                    phi2Intrp = ( sqrt(pow(phi2_1(0,i,ny-1,k),2) + pow(phi2_1(1,i,ny-1,k),2)) - sqrt(pow(phi2_1(0,i,0,k),2) + pow(phi2_1(1,i,0,k),2)) )*(yb+y0*dy)/(2*y0*dy)
+                                + sqrt(pow(phi2_1(0,i,0,k),2) + pow(phi2_1(1,i,0,k),2));
+
+                    phi1_2[0] = phi1_1(0,i,j,k)/phi1Intrp;
+                    phi1_2[1] = phi1_1(1,i,j,k)/phi1Intrp;
+
+                    phi2_2[0] = phi2_1(0,i,j,k)/phi2Intrp;
+                    phi2_2[1] = phi2_1(1,i,j,k)/phi2Intrp;
+
+                    // Now patch both string - antistring pairs together
+
+                    phi(0,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
+                    phi(1,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
+
+                    for(comp=0;comp<3;comp++){ A(comp,i,j,k) = A1(comp,i,j,k) + A2(comp,i,j,k); }
+
+                    // Output the field values at the second timestep.
+
+                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+
+                }
+
+            }
+
         }
 
 
