@@ -7,7 +7,7 @@
 #include <complex>
 #include <random>
 
-#include "header.hpp"
+#include "array.hpp"
 
 using namespace std;
 typedef complex<double> dcmplx;

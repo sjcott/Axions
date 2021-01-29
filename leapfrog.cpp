@@ -7,7 +7,7 @@
 #include <complex>
 #include <vector>
 
-#include "header.hpp"
+#include "array.hpp"
 
 using namespace std;
 

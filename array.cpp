@@ -1,4 +1,4 @@
-#include "header.hpp"
+#include "array.hpp"
 
 Array::Array(int a, int b, int c, int d, int e, double v){
 
@@ -60,6 +60,8 @@ Array::Array(int a, double v){
 
 }
 
+Array::Array(){}
+
 
 double& Array::operator()(int a, int b, int c, int d, int e){
 
@@ -88,6 +90,12 @@ double& Array::operator()(int a, int b){
 double& Array::operator()(int a){
 
     return array[a];
+
+}
+
+void Array::clear(){
+
+    clearArray.swap(array);
 
 }
 

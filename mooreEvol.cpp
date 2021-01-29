@@ -6,7 +6,7 @@
 #include <omp.h>
 #include <complex>
 
-#include "header.hpp"
+#include "array.hpp"
 
 using namespace std;
 

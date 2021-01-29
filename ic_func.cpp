@@ -8,86 +8,78 @@
 #include <random>
 
 #include "array.hpp"
+#include "ic_func.hpp"
 
 using namespace std;
 typedef complex<double> dcmplx;
 
-// Perturb a straight, global string solution, evolve the system and investigate how it radiates.
+// Function to generate initial conditions without reading/writing to a text file
+
+twoArray ic_func(){
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//                                 		  Parameters & Declarations
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                 		  Parameters & Declarations
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const string ic_type = "loop collision";	 // Which type of initial condition generation to use. "NG sine" bases initial conditions on the Nambu-Goto sine wave solution constructed with straight string solutions 
-                                 	 // "simple sine" offsets the straight string solutions (x position) by a sine wave
-			         	 // "random" creates random initial conditions. "boost" creates a single straight (z directed) string with a Lorentz boost applied.
-                                 	 // "loop collision" creates two sets of (seperated) string, anti-string pairs. They are boosted towards each other and patched together so that they will collide
-                                 	 // and form a loop (2 one due to periodic boundary conditions which are required for this sim) 
-
-const int nx = 401;
-const int ny = 401;
-const int nz = 401;
-const double dx = 0.25;
-const double dy = 0.25;
-const double dz = 0.25;
-const double dt = 0.05;
-
-const int n = 1; // This is useless for now, code assumes it is 1.
-const double g = 0;
-
-const double pi = 4*atan(1);
-
-// Needed for straight string solutions based initial conditions /////////////////////
-
-const int SORnx = 20001;
-const double SORa = 0.01;
-
-// Needed for perturbed NG straight strings (i.e NG sine) ///////////////////////////
-
-const double tol = 1e-6;
-const int N_ellipint = 1001; // Number of points to use for elliptical integral evaluation
-
-//const double eps = 0.1;
-//const double lambda = dz*(nz-1)/(1-0.25*eps*eps);
-
-const double gr = 0.5*(1+sqrt(5));
-
-// Needed for random initial conditions ///////////////////////////////////////////////
-
-const double seed = 1;
-
-// Needed for the case of one z directed boosted string
-
-// Relativistic velocities (c=1) so vx^2+vy^2+vz^2 must be less than 1
-
-const double v1x = 0.6*0.4;
-const double v1y = 0.6*sqrt(1-pow(0.4,2));
-const double v1z = 0;
-
-// Needed for loop collision. Assumes string anti-string pair 1 are x directed strings and pair 2 are z directed strings.
-
-const double pos1s[2] = {2, -0.25*(nz-1)*dz}; // y and z coordinates
-const double pos1a[2] = {-2, 0.25*(nz-1)*dz};
-
-const double pos2s[2] = {0.25*(nx-1)*dx, -1}; // x and y coordinates
-const double pos2a[2] = {-0.25*(nx-1)*dx, 1}; 
+    const string ic_type = "loop collision";	 // Which type of initial condition generation to use. "NG sine" bases initial conditions on the Nambu-Goto sine wave solution constructed with straight string solutions 
+                                     	 // "simple sine" offsets the straight string solutions (x position) by a sine wave
+    			         	             // "random" creates random initial conditions. "boost" creates a single straight (z directed) string with a Lorentz boost applied.
+                                     	 // "loop collision" creates two sets of (seperated) string, anti-string pairs. They are boosted towards each other and patched together so that they will collide
+                                     	 // and form a loop (2 one due to periodic boundary conditions which are required for this sim) 
 
 
-const double v1s[3] = {0, -0.6*sqrt(1-pow(0.4,2)), -0.6*0.4};
-const double v1a[3] = {0, 0.6*sqrt(1-pow(0.4,2)), 0.6*0.4};
+    const int n = 1; // This is useless for now, code assumes it is 1.
 
-const double v2s[3] = {0.6*0.4, 0.6*sqrt(1-pow(0.4,2)), 0};
-const double v2a[3] = {-0.6*0.4, -0.6*sqrt(1-pow(0.4,2)), 0};
+    const double pi = 4*atan(1);
 
-const double omega = 0.5; // Phase modification parameter. Phase goes to zero more quickly for larger values
-const double Lmod = 25; // Phase modification parameter. Length scale associated with modification
+    // Needed for straight string solutions based initial conditions /////////////////////
+
+    const int SORnx = 20001;
+    const double SORa = 0.01;
+
+    // Needed for perturbed NG straight strings (i.e NG sine) ///////////////////////////
+
+    const double tol = 1e-6;
+    const int N_ellipint = 1001; // Number of points to use for elliptical integral evaluation
+
+    //const double eps = 0.1;
+    //const double lambda = dz*(nz-1)/(1-0.25*eps*eps);
+
+    const double gr = 0.5*(1+sqrt(5));
+
+    // Needed for random initial conditions ///////////////////////////////////////////////
+
+    const double seed = 1;
+
+    // Needed for the case of one z directed boosted string
+
+    // Relativistic velocities (c=1) so vx^2+vy^2+vz^2 must be less than 1
+
+    const double v1x = 0.6*0.4;
+    const double v1y = 0.6*sqrt(1-pow(0.4,2));
+    const double v1z = 0;
+
+    // Needed for loop collision. Assumes string anti-string pair 1 are x directed strings and pair 2 are z directed strings.
+
+    const double pos1s[2] = {2, -0.25*(nz-1)*dz}; // y and z coordinates
+    const double pos1a[2] = {-2, 0.25*(nz-1)*dz};
+
+    const double pos2s[2] = {0.25*(nx-1)*dx, -1}; // x and y coordinates
+    const double pos2a[2] = {-0.25*(nx-1)*dx, 1}; 
 
 
-int main(){
-    //lambda = dz*(nz-1)/(1-0.25*eps*eps);
+    const double v1s[3] = {0, -0.6*sqrt(1-pow(0.4,2)), -0.6*0.4};
+    const double v1a[3] = {0, 0.6*sqrt(1-pow(0.4,2)), 0.6*0.4};
 
-    Array phi(2,nx,ny,nz,0.0), A(3,nx,ny,nz,0.0);
+    const double v2s[3] = {0.6*0.4, 0.6*sqrt(1-pow(0.4,2)), 0};
+    const double v2a[3] = {-0.6*0.4, -0.6*sqrt(1-pow(0.4,2)), 0};
+
+    const double omega = 0.5; // Phase modification parameter. Phase goes to zero more quickly for larger values
+    const double Lmod = 25; // Phase modification parameter. Length scale associated with modification
+
+
+    Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0);
     int i,j,k,comp;
 
     struct timeval start, end;
@@ -96,13 +88,11 @@ int main(){
     string file_path = __FILE__;
     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
 
-    string icPath = dir_path + "/Data/ic.txt";
     string test1sPath = dir_path + "/Data/test1s.txt";
     string test1aPath = dir_path + "/Data/test1a.txt";
     string test2sPath = dir_path + "/Data/test2s.txt";
     string test2aPath = dir_path + "/Data/test2a.txt";
 
-    ofstream ic (icPath.c_str());
     ofstream test1s (test1sPath.c_str());
     ofstream test1a (test1aPath.c_str());
     ofstream test2s (test2sPath.c_str());
@@ -113,7 +103,7 @@ int main(){
     	Array SOR_Fields(SORnx,2,0.0);
 
         double sigma[nx][nz], Fsigma[2], x, y, z, tolTest, Omega, distance, phiMag, AMag, normal_dist, xs, zs, xs_sigma, zs_sigma, xs_sigma2, zs_sigma2,
-               paraVecMag, paraVecMag_sigma, a, b, sigma1, sigma2, distanceSqr1, distanceSqr2, finaldist, ellipint, theta, trap_fac;
+               paraVecMag, paraVecMag_sigma, a, b, sigma1, sigma2, distanceSqr1, distanceSqr2, finaldist, ellipint, ang, trap_fac;
         int pClosest;
 
         string SOR_inputPath = dir_path + "/Data/SOR_Fields.txt";
@@ -145,9 +135,9 @@ int main(){
             if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
             else{ trap_fac = 1; }
 
-            theta = j*2*pi/(N_ellipint-1);
+            ang = j*2*pi/(N_ellipint-1);
 
-            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*2*pi/(N_ellipint-1);
+            ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*2*pi/(N_ellipint-1);
 
         }
 
@@ -214,9 +204,9 @@ int main(){
                     if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
                     else{ trap_fac = 1; }
 
-                    theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
+                        ang = j*Omega*sigma1/(N_ellipint-1) - pi/2;
 
-                    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
+                    ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*Omega*sigma1/(N_ellipint-1);
 
                 }
 
@@ -228,9 +218,9 @@ int main(){
                     if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
                     else{ trap_fac = 1; }
 
-                    theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
+                    ang = j*Omega*sigma2/(N_ellipint-1) - pi/2;
 
-                    ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
+                    ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*Omega*sigma2/(N_ellipint-1);
 
                 }
 
@@ -318,9 +308,9 @@ int main(){
                             if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
                             else{ trap_fac = 1; }
 
-                            theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
+                            ang = j*Omega*sigma1/(N_ellipint-1) - pi/2;
 
-                            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
+                            ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*Omega*sigma1/(N_ellipint-1);
 
                         }
 
@@ -333,9 +323,9 @@ int main(){
                             if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
                             else{ trap_fac = 1; }
 
-                            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
+                            ang = j*Omega*sigma2/(N_ellipint-1) - pi/2;
 
-                            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
+                            ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*Omega*sigma2/(N_ellipint-1);
 
                         }
 
@@ -357,9 +347,9 @@ int main(){
 			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
 		            else{ trap_fac = 1; }
 
-		            theta = j*Omega*sigma1/(N_ellipint-1) - pi/2;
+		            ang = j*Omega*sigma1/(N_ellipint-1) - pi/2;
 
-		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma1/(N_ellipint-1);
+		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*Omega*sigma1/(N_ellipint-1);
 
 			}
 
@@ -371,9 +361,9 @@ int main(){
 			    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
 		            else{ trap_fac = 1; }
 
-		            theta = j*Omega*sigma2/(N_ellipint-1) - pi/2;
+		            ang = j*Omega*sigma2/(N_ellipint-1) - pi/2;
 
-		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma2/(N_ellipint-1);
+		            ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*Omega*sigma2/(N_ellipint-1);
 
 			}
 
@@ -418,9 +408,9 @@ int main(){
 		    if(j==0 or j==N_ellipint-1){ trap_fac = 0.5; }
 	            else{ trap_fac = 1; }
 
-	            theta = j*Omega*sigma[i][k]/(N_ellipint-1) - pi/2;
+	            ang = j*Omega*sigma[i][k]/(N_ellipint-1) - pi/2;
 
-	            ellipint += trap_fac*sqrt(1 - pow(eps*sin(theta),2))*Omega*sigma[i][k]/(N_ellipint-1);
+	            ellipint += trap_fac*sqrt(1 - pow(eps*sin(ang),2))*Omega*sigma[i][k]/(N_ellipint-1);
 
 		}
 
@@ -478,13 +468,13 @@ int main(){
 
      	      			// To prevent division by zero
 
-     			    	phi(0,i,j,k) = 0;
-     			    	A(1,i,j,k) = 0;
+     			    	phi(0,0,i,j,k) = 0;
+     			    	theta(1,0,i,j,k) = 0;
 
      			    } else{
 
-     			    	phi(0,i,j,k) = phiMag*normal_dist/distance;
-     		     		A(1,i,j,k) = AMag*normal_dist/pow(distance,2);
+     			    	phi(0,0,i,j,k) = phiMag*normal_dist/distance;
+     		     		theta(1,0,i,j,k) = dy*g*AMag*normal_dist/pow(distance,2);
 
      	      		}
 
@@ -492,15 +482,15 @@ int main(){
 
      		     		// To prevent division by zero
 
-     		     		phi(1,i,j,k) = 0;
-     		     		A(0,i,j,k) = 0;
-     	      			A(2,i,j,k) = 0;
+     		     		phi(1,0,i,j,k) = 0;
+     		     		theta(0,0,i,j,k) = 0;
+     	      			theta(2,0,i,j,k) = 0;
 
      	      		} else{
 
-     	      			phi(1,i,j,k) = phiMag*y/distance;
-        			A(0,i,j,k) = -AMag*zs_sigma*y/(pow(distance,2)*paraVecMag);
-     	      			A(2,i,j,k) = AMag*xs_sigma*y/(pow(distance,2)*paraVecMag);
+     	      			phi(1,0,i,j,k) = phiMag*y/distance;
+                        theta(0,0,i,j,k) = -dx*g*AMag*zs_sigma*y/(pow(distance,2)*paraVecMag);
+     	      			theta(2,0,i,j,k) = dz*g*AMag*xs_sigma*y/(pow(distance,2)*paraVecMag);
 
      	      		}
 
@@ -514,32 +504,27 @@ int main(){
 
      	      		// Reflection across z=0
 
-     	      		phi(0,nx-1-i,j,nz-1-k) = -phi(0,i,j,k);
-     	      		phi(1,nx-1-i,j,nz-1-k) = phi(1,i,j,k);
+     	      		phi(0,0,nx-1-i,j,nz-1-k) = -phi(0,0,i,j,k);
+     	      		phi(1,0,nx-1-i,j,nz-1-k) = phi(1,0,i,j,k);
 
-     	      		A(0,nx-1-i,j,nz-1-k) = A(0,i,j,k);
-     	      		A(1,nx-1-i,j,nz-1-k) = -A(1,i,j,k);
-     	      		if(k!=nz-1){ A(2,nx-1-i,j,nz-2-k) = -A(2,i,j,k); }
+     	      		theta(0,0,nx-1-i,j,nz-1-k) = theta(0,0,i,j,k);
+     	      		theta(1,0,nx-1-i,j,nz-1-k) = -theta(1,0,i,j,k);
+     	      		if(k!=nz-1){ theta(2,0,nx-1-i,j,nz-2-k) = -theta(2,0,i,j,k); }
+
+                    // Set the values at the next timestep to be the same
+
+                    phi(0,1,i,j,k) = phi(0,0,i,j,k);
+                    phi(1,1,i,j,k) = phi(1,0,i,j,k);
+                    theta(0,1,i,j,k) = theta(0,0,i,j,k);
+                    theta(1,1,i,j,k) = theta(1,0,i,j,k);
+                    theta(2,1,i,j,k) = theta(2,0,i,j,k);
 
         		}
 
          	}
         }
 
-    	// Output field to file
-
-    	for(i=0;i<nx;i++){
-   	    for(j=0;j<ny;j++){
-        	for(k=0;k<nz;k++){
-
-            	    // Convert gauge field to lattice link variable for use in evolution code
-
-            	    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
-
-        	}
-            }
-        }
-
+    	
     } else if(ic_type == "simple sine"){
 
         Array SOR_Fields(SORnx,2,0.0);
@@ -610,57 +595,51 @@ int main(){
                         if(g==0){ AMag = 0; }
                         else{ AMag = n/g; }
 
-     	      		cout << "Off straight string solution grid" << endl;
+                        cout << "Off straight string solution grid" << endl;
 
-        	    }
+                    }
 
-		    // Now need to assign the phase of phi and components of gauge fields
+                    // Now need to assign the phase of phi and components of gauge fields
 
-		    if(xdist==0){
+                    if(xdist==0){
 
-     	      		// To prevent division by zero
+                        // To prevent division by zero
 
-     			phi(0,i,j,k) = 0;
-     			A(1,i,j,k) = 0;
+                        phi(0,0,i,j,k) = 0;
+                        theta(1,0,i,j,k) = 0;
 
-		    } else{
+                    } else{
 
-     		    	phi(0,i,j,k) = phiMag*xdist/distance;
-     	     		A(1,i,j,k) = AMag*xdist/pow(distance,2);
+                        phi(0,0,i,j,k) = phiMag*xdist/distance;
+                        theta(1,0,i,j,k) = dy*g*AMag*xdist/pow(distance,2);
 
-        	    }
+                    }
 
      	      	    if(y==0){
 
-     		  	// To prevent division by zero
+                        // To prevent division by zero
 
-     		     	phi(1,i,j,k) = 0;
-     		     	A(0,i,j,k) = 0;
-     	      		A(2,i,j,k) = 0;
+                        phi(1,0,i,j,k) = 0;
+                        theta(0,0,i,j,k) = 0;
+                        theta(2,0,i,j,k) = 0;
 
      	      	    } else{
 
-     	      		phi(1,i,j,k) = phiMag*y/distance;
-        		A(0,i,j,k) = -AMag*y/pow(distance,2);
-     	      		A(2,i,j,k) = 0;
+                        phi(1,0,i,j,k) = phiMag*y/distance;
+                        theta(0,0,i,j,k) = -dx*g*AMag*y/pow(distance,2);
+                        theta(2,0,i,j,k) = 0;
 
      	      	    }
 
-		}
-	    }
-	}
+                    // Set the second timestep as equal to the first
 
-	// Output field to file
+                    phi(0,1,i,j,k) = phi(0,0,i,j,k);
+                    phi(1,1,i,j,k) = phi(1,0,i,j,k);
+                    theta(0,1,i,j,k) = theta(0,0,i,j,k);
+                    theta(1,1,i,j,k) = theta(1,0,i,j,k);
+                    theta(2,1,i,j,k) = theta(2,0,i,j,k);
 
-    	for(i=0;i<nx;i++){
-   	    for(j=0;j<ny;j++){
-        	for(k=0;k<nz;k++){
-
-            	    // Convert gauge field to lattice link variable for use in evolution code
-
-            	    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
-
-        	}
+                }
             }
         }
 
@@ -676,22 +655,26 @@ int main(){
             for(j=0;j<ny;j++){
                 for(k=0;k<nz;k++){
 
-                    phi(0,i,j,k) = unif_rand(eng);
-                    phi(1,i,j,k) = unif_rand(eng);
+                    phi(0,0,i,j,k) = unif_rand(eng);
+                    phi(1,0,i,j,k) = unif_rand(eng);
 
                     if(g != 0){
 
-                        // Gauge fields scaled by 1/g to try to account for "natural magnitude" of field. May need to adjust the way this is done
+                        // Gauge fields scaled by 1/g to try to account for "natural magnitude" of field. May need to adjust the way this is done. Then converted to lattice link variable by *dx_i*g
 
-                        A(0,i,j,k) = unif_rand(eng)/g;
-                        A(1,i,j,k) = unif_rand(eng)/g;
-                        A(2,i,j,k) = unif_rand(eng)/g;
+                        theta(0,0,i,j,k) = dx*unif_rand(eng);
+                        theta(1,0,i,j,k) = dy*unif_rand(eng);
+                        theta(2,0,i,j,k) = dz*unif_rand(eng);
 
                     }
 
-                    // Otherwise leave the A array as initialised - zeros everywhere
+                    // Set the second timestep to be equal to the first
 
-                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+                    phi(0,1,i,j,k) = phi(0,0,i,j,k);
+                    phi(1,1,i,j,k) = phi(1,0,i,j,k);
+                    theta(0,1,i,j,k) = theta(0,0,i,j,k);
+                    theta(1,1,i,j,k) = theta(1,0,i,j,k);
+                    theta(2,1,i,j,k) = theta(2,0,i,j,k);
 
                 }
             }
@@ -785,12 +768,12 @@ int main(){
 
                         // To prevent division by zero
 
-                        phi(0,i,j,k) = 0;
+                        phi(0,0,i,j,k) = 0;
                         Ay = 0;
 
                     } else{
 
-                        phi(0,i,j,k) = phiMag*xs/distance;
+                        phi(0,0,i,j,k) = phiMag*xs/distance;
                         Ay = AMag*xs/pow(distance,2);
 
                     }
@@ -799,12 +782,12 @@ int main(){
 
                         // To prevent division by zero
 
-                        phi(1,i,j,k) = 0;
+                        phi(1,0,i,j,k) = 0;
                         Ax = 0;
 
                     } else{
 
-                        phi(1,i,j,k) = phiMag*ys/distance;
+                        phi(1,0,i,j,k) = phiMag*ys/distance;
                         Ax = -AMag*ys/pow(distance,2);
 
                     }
@@ -812,13 +795,11 @@ int main(){
                     // Now need to transform the gauge fields as one-forms under the Lorentz transformation. It is the inverse of the coordinate transformation but no difference at t=0.
 
                     At(i,j,k) = -gamma*(v1x*Ax + v1y*Ay);
-                    A(0,i,j,k) = Ax + (gamma-1)*(v1x*Ax + v1y*Ay)*v1x/vMagSqr;
-                    A(1,i,j,k) = Ay + (gamma-1)*(v1x*Ax + v1y*Ay)*v1y/vMagSqr;
-                    A(2,i,j,k) = (gamma-1)*(v1x*Ax + v1y*Ay)*v1z/vMagSqr;
+                    theta(0,0,i,j,k) = dx*g*( Ax + (gamma-1)*(v1x*Ax + v1y*Ay)*v1x/vMagSqr );
+                    theta(1,0,i,j,k) = dy*g*( Ay + (gamma-1)*(v1x*Ax + v1y*Ay)*v1y/vMagSqr );
+                    theta(2,0,i,j,k) = dz*g*( (gamma-1)*(v1x*Ax + v1y*Ay)*v1z/vMagSqr );
 
                     // At is needed for the gauge transformation at the next time step. Gauge transformation sets At(t=0) to zero without affecting Ai(t=0) but will have an effect on Ai(t=dt)
-
-                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
 
                 }
             }
@@ -916,25 +897,26 @@ int main(){
                     // Since there is no time component of the gauge field in stationary frame the time part does not contribute unlike for the coordinates
 
 
-                    A(0,i,j,k) = Ax + (gamma-1)*(v1x*Ax + v1y*Ay)*v1x/vMagSqr;
-                    A(1,i,j,k) = Ay + (gamma-1)*(v1x*Ax + v1y*Ay)*v1y/vMagSqr;
-                    A(2,i,j,k) = (gamma-1)*(v1x*Ax + v1y*Ay)*v1z/vMagSqr;
+                    theta(0,1,i,j,k) = dx*g*( Ax + (gamma-1)*(v1x*Ax + v1y*Ay)*v1x/vMagSqr );
+                    theta(1,1,i,j,k) = dy*g*( Ay + (gamma-1)*(v1x*Ax + v1y*Ay)*v1y/vMagSqr );
+                    theta(2,1,i,j,k) = dz*g*( (gamma-1)*(v1x*Ax + v1y*Ay)*v1z/vMagSqr );
 
                     // Need to make a gauge transformation to remain in the temporal gauge after the gauge transformation. Assumes there are not periodic boundary conditions (as just one string)
+                    // multiplication by dx_i*g is to convert to a lattice link variable
 
                     // x component
 
                     if(i==0){
 
-                        A(0,i,j,k) += -dt*( At(i+1,j,k) - At(i,j,k) )/dx;
+                        theta(0,1,i,j,k) += -dx*g*dt*( At(i+1,j,k) - At(i,j,k) )/dx;
 
                     } else if(i==nx-1){
 
-                        A(0,i,j,k) += -dt*( At(i,j,k) - At(i-1,j,k) )/dx;
+                        theta(0,1,i,j,k) += -dx*g*dt*( At(i,j,k) - At(i-1,j,k) )/dx;
 
                     } else{
 
-                        A(0,i,j,k) += -dt*( At(i+1,j,k) - At(i-1,j,k) )/(2*dx);
+                        theta(0,1,i,j,k) += -dx*g*dt*( At(i+1,j,k) - At(i-1,j,k) )/(2*dx);
 
                     }
 
@@ -942,15 +924,15 @@ int main(){
 
                     if(j==0){
 
-                        A(1,i,j,k) += -dt*( At(i,j+1,k) - At(i,j,k) )/dy;
+                        theta(1,1,i,j,k) += -dy*g*dt*( At(i,j+1,k) - At(i,j,k) )/dy;
 
                     } else if(j==ny-1){
 
-                        A(1,i,j,k) += -dt*( At(i,j,k) - At(i,j-1,k) )/dy;
+                        theta(1,1,i,j,k) += -dy*g*dt*( At(i,j,k) - At(i,j-1,k) )/dy;
 
                     } else{
 
-                        A(1,i,j,k) += -dt*( At(i,j+1,k) - At(i,j-1,k) )/(2*dy);
+                        theta(1,1,i,j,k) += -dy*g*dt*( At(i,j+1,k) - At(i,j-1,k) )/(2*dy);
 
                     }
 
@@ -958,24 +940,22 @@ int main(){
 
                     if(k==0){
 
-                        A(2,i,j,k) += -dt*( At(i,j,k+1) - At(i,j,k) )/dz;
+                        theta(2,1,i,j,k) += -dz*g*dt*( At(i,j,k+1) - At(i,j,k) )/dz;
 
                     } else if(k==nz-1){
 
-                        A(2,i,j,k) += -dt*( At(i,j,k) - At(i,j,k-1) )/dz;
+                        theta(2,1,i,j,k) += -dz*g*dt*( At(i,j,k) - At(i,j,k-1) )/dz;
 
                     } else{
 
-                        A(2,i,j,k) += -dt*( At(i,j,k+1) - At(i,j,k-1) )/(2*dz);
+                        theta(2,1,i,j,k) += -dz*g*dt*( At(i,j,k+1) - At(i,j,k-1) )/(2*dz);
 
                     }
 
                     // Now transform the scalar field as well
 
-                    phi(0,i,j,k) = cos(-g*dt*At(i,j,k))*Re_phi - sin(-g*dt*At(i,j,k))*Im_phi;
-                    phi(1,i,j,k) = cos(-g*dt*At(i,j,k))*Im_phi + sin(-g*dt*At(i,j,k))*Re_phi;
-
-                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+                    phi(0,1,i,j,k) = cos(-g*dt*At(i,j,k))*Re_phi - sin(-g*dt*At(i,j,k))*Im_phi;
+                    phi(1,1,i,j,k) = cos(-g*dt*At(i,j,k))*Im_phi + sin(-g*dt*At(i,j,k))*Re_phi;
 
                 }
             }
@@ -1361,14 +1341,12 @@ int main(){
 
                     // Now patch both string - antistring pairs together
 
-                    phi(0,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
-                    phi(1,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
+                    phi(0,0,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
+                    phi(1,0,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
 
-                    for(comp=0;comp<3;comp++){ A(comp,i,j,k) = A1(comp,i,j,k) + A2(comp,i,j,k); }
-
-                    // Output the field values at the initial time.
-
-                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+                    theta(0,0,i,j,k) = dx*g*( A1(0,i,j,k) + A2(0,i,j,k) );
+                    theta(1,0,i,j,k) = dy*g*( A1(1,i,j,k) + A2(1,i,j,k) );
+                    theta(2,0,i,j,k) = dz*g*( A1(2,i,j,k) + A2(2,i,j,k) );
 
                 }
 
@@ -1720,14 +1698,12 @@ int main(){
 
                     // Now patch both string - antistring pairs together
 
-                    phi(0,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
-                    phi(1,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
+                    phi(0,1,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
+                    phi(1,1,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
 
-                    for(comp=0;comp<3;comp++){ A(comp,i,j,k) = A1(comp,i,j,k) + A2(comp,i,j,k); }
-
-                    // Output the field values at the second timestep.
-
-                    ic << phi(0,i,j,k) << " " << phi(1,i,j,k) << " " << dx*g*A(0,i,j,k) << " " << dy*g*A(1,i,j,k) << " " << dz*g*A(2,i,j,k) << endl;
+                    theta(0,1,i,j,k) = dx*g*( A1(0,i,j,k) + A2(0,i,j,k) );
+                    theta(1,1,i,j,k) = dy*g*( A1(1,i,j,k) + A2(1,i,j,k) );
+                    theta(2,1,i,j,k) = dz*g*( A1(2,i,j,k) + A2(2,i,j,k) );
 
                 }
 
@@ -1746,10 +1722,13 @@ int main(){
 
     gettimeofday(&end,NULL);
 
-    cout << "Time taken: " << end.tv_sec - start.tv_sec << "s" << endl;
+    cout << "Time taken for initial conditions: " << end.tv_sec - start.tv_sec << "s" << endl;
 
+    twoArray ic;
+    ic.array1 = phi;
+    ic.array2 = theta;
 
-	return 0;
+	return ic;
 
 }
 

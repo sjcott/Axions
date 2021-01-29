@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "array.hpp"
+#include "ic_func.hpp"
 
 using namespace std;
 
@@ -19,9 +20,9 @@ using namespace std;
 
 // Some parts of code may assume nx,ny and nz are odd numbers
 
-const int nx = 401;
-const int ny = 401;
-const int nz = 401;
+const int nx = 201;
+const int ny = 201;
+const int nz = 201;
 const int nt = 2001;
 const double dx = 0.35;
 const double dy = 0.35;
@@ -43,7 +44,6 @@ const string xyBC = "periodic"; // Allows for "neumann" (covariant derivatives s
 const string zBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "periodic" or fixed (any other string will choose this option) boundary conditions.
 
 const bool stringPos = false;
-const bool stationary_ic = false; // true if the initial conditions code doesn't also define the field values at second timestep.
 const bool stringDetect = true; // true if you want the code to find which faces the strings pass through. May try to calculate string length later too.
 const bool splitLength = true;
 
@@ -67,7 +67,6 @@ int main(){
     cout << "Enter a tag for output files: " << flush;
     cin >> input;
 
-    string icPath = dir_path + "/Data/ic.txt";
     string finalFieldPath = dir_path + "/Data/finalField.txt";
     string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + input + ".txt";
     //string valsPerLoopPath = dir_path + "/Data/valsPerLoop_test.txt";
@@ -75,7 +74,6 @@ int main(){
     string test2Path = dir_path + "/test2.txt";
     string powerdensityOutPath = dir_path + "/Data/powerdensityOut.txt";
 
-    ifstream ic (icPath.c_str());
     ofstream finalField (finalFieldPath.c_str());
     ofstream valsPerLoop (valsPerLoopPath.c_str());
     ofstream test1 (test1Path.c_str());
@@ -86,39 +84,12 @@ int main(){
     y0 = int(0.5*(ny-1));
     z0 = int(0.5*(nz-1));
 
-    if(stationary_ic){
+    // Use a scope block to deallocate the memory used by the twoArray struct "ic" once data has been transferred to the Arrays 
+    {
 
-        for(i=0;i<nx;i++){
-            for(j=0;j<ny;j++){
-                for(k=0;k<nz;k++){
-
-                    ic >> phi(0,0,i,j,k) >> phi(1,0,i,j,k) >> theta(0,0,i,j,k) >> theta(1,0,i,j,k) >> theta(2,0,i,j,k);
-
-                    // Second time step is equal to first.
-
-                    phi(0,1,i,j,k) = phi(0,0,i,j,k);
-                    phi(1,1,i,j,k) = phi(1,0,i,j,k);
-                    theta(0,1,i,j,k) = theta(0,0,i,j,k);
-                    theta(1,1,i,j,k) = theta(1,0,i,j,k);
-                    theta(2,1,i,j,k) = theta(2,0,i,j,k);
-
-                }
-            }
-        }
-
-    } else{
-
-        for(TimeStep=0;TimeStep<2;TimeStep++){
-            for(i=0;i<nx;i++){
-                for(j=0;j<ny;j++){
-                    for(k=0;k<nz;k++){
-
-                        ic >> phi(0,TimeStep,i,j,k) >> phi(1,TimeStep,i,j,k) >> theta(0,TimeStep,i,j,k) >> theta(1,TimeStep,i,j,k) >> theta(2,TimeStep,i,j,k);
-
-                    }
-                }
-            }
-        }
+        twoArray ic = ic_func(); // Declare struct and receive the two Arrays phi and theta from the initial conditions function
+        phi = ic.array1;
+        theta = ic.array2;
 
     }
 
