@@ -36,12 +36,14 @@ const double g = 0;
 const int damped_nt = 0; // Number of time steps for which damping is imposed. Useful for random initial conditions
 const double dampFac = 0; // magnitude of damping term, unclear how strong to make this
 
-const bool makeGif = false;
+const bool makeGif = true;
 const int saveFreq = 10;
 const int countRate = 10;
 
-const string xyBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "absorbing", "periodic" or fixed (any other string will choose this option) boundary conditions.
-const string zBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "periodic" or fixed (any other string will choose this option) boundary conditions.
+// Centaurus doesn't like me putting these in openmp shared() if they are const and my laptop/telesto don't like it if I dont.
+// My solution has been to just remove the const declaration
+string xyBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "absorbing", "periodic" or fixed (any other string will choose this option) boundary conditions.
+string zBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "periodic" or fixed (any other string will choose this option) boundary conditions.
 
 const bool stringPos = false;
 const bool stringDetect = true; // true if you want the code to find which faces the strings pass through. May try to calculate string length later too.
@@ -49,12 +51,6 @@ const bool splitLength = true;
 
 
 int main(){
-
-	Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0);
-	int comp, i, j, k, TimeStep, gifFrame, tNow, tPast, s, counter, x0, y0, z0, xEdge1, xEdge2, yEdge1, yEdge2, zEdge1, zEdge2, im, jm, km, ip, jp, kp;
-    double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], curx, cury, curz, Fxy_y, Fxz_z, Fyx_x, Fyz_z, Fzx_x, Fzy_y, phit[2], energy, phitx, phity, thetat[3], divTheta[2], divThetat,
-           thetaDotCont, Fxy, Fxz, Fyz, FCont, deviationParameter, thetaxx, thetayy, thetazz, thetatx, thetaty, damp, stringLength[2];
-    int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
 
 	struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -64,8 +60,9 @@ int main(){
     stringstream ss;
 
     string input;
-    cout << "Enter a tag for output files: " << flush;
-    cin >> input;
+    //cout << "Enter a tag for output files: " << flush;
+    //cin >> input;
+    input = "test";
 
     string finalFieldPath = dir_path + "/Data/finalField.txt";
     string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + input + ".txt";
@@ -80,18 +77,29 @@ int main(){
     ofstream test2 (test2Path.c_str());
     ofstream powerdensityOut (powerdensityOutPath.c_str());
 
+    twoArray ic = ic_func();
+    Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0);
+    phi = ic.array1;
+    theta = ic.array2;
+
+    // // Use a scope block to deallocate the memory used by the twoArray struct "ic" once data has been transferred to the Arrays 
+    // {
+
+    //     twoArray ic = ic_func(); // Declare struct and receive the two Arrays phi and theta from the initial conditions function
+    //     phi = ic.array1;
+    //     theta = ic.array2;
+
+    // }
+
+    Array phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0);
+    int comp, i, j, k, TimeStep, gifFrame, tNow, tPast, s, counter, x0, y0, z0, xEdge1, xEdge2, yEdge1, yEdge2, zEdge1, zEdge2, im, jm, km, ip, jp, kp;
+    double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], curx, cury, curz, Fxy_y, Fxz_z, Fyx_x, Fyz_z, Fzx_x, Fzy_y, phit[2], energy, phitx, phity, thetat[3], divTheta[2], divThetat,
+           thetaDotCont, Fxy, Fxz, Fyz, FCont, deviationParameter, thetaxx, thetayy, thetazz, thetatx, thetaty, damp, stringLength[2];
+    int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
+
     x0 = int(0.5*(nx-1));
     y0 = int(0.5*(ny-1));
     z0 = int(0.5*(nz-1));
-
-    // Use a scope block to deallocate the memory used by the twoArray struct "ic" once data has been transferred to the Arrays 
-    {
-
-        twoArray ic = ic_func(); // Declare struct and receive the two Arrays phi and theta from the initial conditions function
-        phi = ic.array1;
-        theta = ic.array2;
-
-    }
 
     gifFrame = 0;
     counter = 0;

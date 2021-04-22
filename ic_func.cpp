@@ -35,7 +35,7 @@ twoArray ic_func(){
 
     // Needed for straight string solutions based initial conditions /////////////////////
 
-    const int SORnx = 20001;
+    const int SORnx = 30001;
     const double SORa = 0.01;
 
     // Needed for perturbed NG straight strings (i.e NG sine) ///////////////////////////
@@ -646,6 +646,8 @@ twoArray ic_func(){
 
     } else if(ic_type == "random"){
 
+        // Assumes eta=1
+
         uniform_real_distribution<double> unif_rand(-1,1);
         minstd_rand eng;
 
@@ -966,10 +968,10 @@ twoArray ic_func(){
         // Could probably simplify a lot of this by incorporating all strings into one array. i.e make At(4,nx,ny,nz,0.0)
 
         Array SOR_Fields(SORnx,2,0.0), At1s(nx,ny,nz,0.0), At1a(nx,ny,nz,0.0), At2s(nx,ny,nz,0.0), At2a(nx,ny,nz,0.0), phi1_0(2,nx,ny,nz,0.0), phi2_0(2,nx,ny,nz,0.0),
-              phi1_1(2,nx,ny,nz,0.0), phi2_1(2,nx,ny,nz,0.0), A1(3,nx,ny,nz,0.0), A2(3,nx,ny,nz,0.0);
+              phi1_1(2,nx,ny,nz,0.0), phi2_1(2,nx,ny,nz,0.0);
 
         double distance[4], phiMag[4], AMag[4], xb, yb, zb, xs2s, xs2a, ys1s, ys1a, ys2s, ys2a, zs1s, zs1a, A1s[2], A1a[3], A2s[3], A2a[3], phi1s[2], phi1a[2], phi2s[2], phi2a[2],
-               A1sPatch[3], A1aPatch[3], A2sPatch[3], A2aPatch[3], phase_fac, norm_fac, phi1Intrp, phi2Intrp, phi1_2[2], phi2_2[2];
+               A1sPatch[3], A1aPatch[3], A2sPatch[3], A2aPatch[3], phase_fac, norm_fac, phi1Intrp, phi2Intrp, phi1_2[2], phi2_2[2], A1[3], A2[3];
         int pClosest[4], str, ip, im, jp, jm, kp, km;
         dcmplx ci(0.0,1.0), cUnitPos1s, cUnitPos1a, cUnitPos2s, cUnitPos2a, gRot1s, gRot1a, gRot2s, gRot2a;
 
@@ -1195,7 +1197,7 @@ twoArray ic_func(){
 
                         // Patch the string - antistring pair together and multiply by phasefac so regularity is preserved at the boundaries
                         // Possibly not necessary for the component parallel to the string under some symmetry conditions. No equivalent of normalising the magnitude here 
-                        A1(comp,i,j,k) = (A1sPatch[comp] + A1aPatch[comp])*phase_fac;
+                        A1[comp] = (A1sPatch[comp] + A1aPatch[comp])*phase_fac;
 
                     }
 
@@ -1227,7 +1229,7 @@ twoArray ic_func(){
                         A2sPatch[comp] = (gamma2s-1)*(v2s[0]*A2s[0] + v2s[1]*A2s[1])*v2s[comp]/v2sMagSqr;
                         A2aPatch[comp] = (gamma2a-1)*(v2a[0]*A2a[0] + v2a[1]*A2a[1])*v2a[comp]/v2aMagSqr;
 
-                        A2(comp,i,j,k) = (A2sPatch[comp] + A2aPatch[comp])*phase_fac;
+                        A2[comp] = (A2sPatch[comp] + A2aPatch[comp])*phase_fac;
 
                     }
 
@@ -1240,6 +1242,12 @@ twoArray ic_func(){
                     At2s(i,j,k) = -gamma2s*(v2s[0]*A2s[0] + v2s[1]*A2s[1]);
                     At2a(i,j,k) = -gamma2a*(v2a[0]*A2a[0] + v2a[1]*A2a[1]);
 
+                    // Patch the gauge fields of the two pairs of strings together as no more processing is needed.
+                    // The values will all be zero on the boundaries (naturally on string direction boundary and enforced by phase_fac on the other two)
+
+                    theta(0,0,i,j,k) = dx*g*( A1[0] + A2[0] );
+                    theta(1,0,i,j,k) = dy*g*( A1[1] + A2[1] );
+                    theta(2,0,i,j,k) = dz*g*( A1[2] + A2[2] );
                     
 
                     // for(comp=0;comp<3;comp++){ 
@@ -1343,10 +1351,6 @@ twoArray ic_func(){
 
                     phi(0,0,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
                     phi(1,0,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
-
-                    theta(0,0,i,j,k) = dx*g*( A1(0,i,j,k) + A2(0,i,j,k) );
-                    theta(1,0,i,j,k) = dy*g*( A1(1,i,j,k) + A2(1,i,j,k) );
-                    theta(2,0,i,j,k) = dz*g*( A1(2,i,j,k) + A2(2,i,j,k) );
 
                 }
 
@@ -1586,7 +1590,7 @@ twoArray ic_func(){
 
                     }
 
-                    for(comp=0;comp<3;comp++){ A1(comp,i,j,k) = (A1sPatch[comp] + A1aPatch[comp])*phase_fac; }
+                    for(comp=0;comp<3;comp++){ A1[comp] = (A1sPatch[comp] + A1aPatch[comp])*phase_fac; }
 
                     // Do the same for the second string - antistring pair (z directed)
 
@@ -1608,8 +1612,13 @@ twoArray ic_func(){
 
                     }
 
-                    for(comp=0;comp<3;comp++){ A2(comp,i,j,k) = (A2sPatch[comp] + A2aPatch[comp])*phase_fac; }
+                    for(comp=0;comp<3;comp++){ A2[comp] = (A2sPatch[comp] + A2aPatch[comp])*phase_fac; }
 
+                    // Patch the gauge fields of the string pairs together
+
+                    theta(0,1,i,j,k) = dx*g*( A1[0] + A2[0] );
+                    theta(1,1,i,j,k) = dy*g*( A1[1] + A2[1] );
+                    theta(2,1,i,j,k) = dz*g*( A1[2] + A2[2] );
 
                     // // Patch the strings together
 
@@ -1700,10 +1709,6 @@ twoArray ic_func(){
 
                     phi(0,1,i,j,k) = phi1_2[0]*phi2_2[0] - phi1_2[1]*phi2_2[1];
                     phi(1,1,i,j,k) = phi1_2[0]*phi2_2[1] + phi1_2[1]*phi2_2[0];
-
-                    theta(0,1,i,j,k) = dx*g*( A1(0,i,j,k) + A2(0,i,j,k) );
-                    theta(1,1,i,j,k) = dy*g*( A1(1,i,j,k) + A2(1,i,j,k) );
-                    theta(2,1,i,j,k) = dz*g*( A1(2,i,j,k) + A2(2,i,j,k) );
 
                 }
 

@@ -16,7 +16,7 @@ using namespace std;
 // Abelian-Higgs introduces the gauge coupling parameter.
 
 
-const int nx =20001;
+const int nx =30001;
 const double h=0.01;
 const double w=1.5; // Relaxation factor > 1. Trial and error to get better convergence.
 const int maxIter = 2000000;
