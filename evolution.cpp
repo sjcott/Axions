@@ -6,6 +6,7 @@
 #include <omp.h>
 #include <complex>
 #include <vector>
+#include <algorithm>
 
 #include "array.hpp"
 
@@ -19,39 +20,42 @@ using namespace std;
 
 // Some parts of code may assume nx,ny and nz are odd numbers
 
-const int nx = 401;
-const int ny = 401;
-const int nz = 401;
-const int nt = 2001;
-const double dx = 0.35;
-const double dy = 0.35;
-const double dz = 0.35;
+const int nx = 201;
+const int ny = 201;
+const int nz = 201;
+const int nt = 3001;
+const double dx = 0.5;
+const double dy = 0.5;
+const double dz = 0.5;
 const double dt = 0.05;
 
 const double lambda = 1;
 const double eta = 1;
 const double g = 0;
 
-const int damped_nt = 0; // Number of time steps for which damping is imposed. Useful for random initial conditions
-const double dampFac = 0; // magnitude of damping term, unclear how strong to make this
+const int damped_nt = 100; // Number of time steps for which damping is imposed. Useful for random initial conditions
+const double dampFac = 1; // magnitude of damping term, unclear how strong to make this
 
-const bool makeGif = false;
-const int saveFreq = 10;
+const bool makeGif = false; // Outputs data to make a gif of the isosurfaces
+const bool makeStringPosGif = true; // Outputs data to make a gif of the calculated string position and curvature data
+const int saveFreq = 5;
 const int countRate = 10;
 
 const string xyBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "absorbing", "periodic" or fixed (any other string will choose this option) boundary conditions.
 const string zBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "periodic" or fixed (any other string will choose this option) boundary conditions.
 
 const bool stringPos = false;
-const bool stationary_ic = false; // true if the initial conditions code doesn't also define the field values at second timestep.
+const bool stationary_ic = true; // true if the initial conditions code doesn't also define the field values at second timestep.
 const bool stringDetect = true; // true if you want the code to find which faces the strings pass through. May try to calculate string length later too.
-const bool splitLength = true;
+const bool detectBuffer = false; // true if you want to don't want the code to find strings during damping process. Usually because random ic means you will find A LOT of strings --> memory issues.
+const bool splitLength = false;
+const bool finalOut = false;
 
 
 int main(){
 
 	Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0);
-	int comp, i, j, k, TimeStep, gifFrame, tNow, tPast, s, counter, x0, y0, z0, xEdge1, xEdge2, yEdge1, yEdge2, zEdge1, zEdge2, im, jm, km, ip, jp, kp;
+	int comp, i, j, k, TimeStep, gifFrame, gifStringPosFrame, tNow, tPast, s, counter, x0, y0, z0, xEdge1, xEdge2, yEdge1, yEdge2, zEdge1, zEdge2, im, jm, km, ip, jp, kp;
     double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], curx, cury, curz, Fxy_y, Fxz_z, Fyx_x, Fyz_z, Fzx_x, Fzy_y, phit[2], energy, phitx, phity, thetat[3], divTheta[2], divThetat,
            thetaDotCont, Fxy, Fxz, Fyz, FCont, deviationParameter, thetaxx, thetayy, thetazz, thetatx, thetaty, damp, stringLength[2];
     int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
@@ -70,7 +74,7 @@ int main(){
     string icPath = dir_path + "/Data/ic.txt";
     string finalFieldPath = dir_path + "/Data/finalField.txt";
     string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + input + ".txt";
-    //string valsPerLoopPath = dir_path + "/Data/valsPerLoop_test.txt";
+    string neighboursOutPath = dir_path + "/Data/neighboursOut.txt";
     string test1Path = dir_path + "/test1.txt";
     string test2Path = dir_path + "/test2.txt";
     string powerdensityOutPath = dir_path + "/Data/powerdensityOut.txt";
@@ -78,6 +82,7 @@ int main(){
     ifstream ic (icPath.c_str());
     ofstream finalField (finalFieldPath.c_str());
     ofstream valsPerLoop (valsPerLoopPath.c_str());
+    ofstream neighboursOut (neighboursOutPath.c_str());
     ofstream test1 (test1Path.c_str());
     ofstream test2 (test2Path.c_str());
     ofstream powerdensityOut (powerdensityOutPath.c_str());
@@ -123,6 +128,7 @@ int main(){
     }
 
     gifFrame = 0;
+    gifStringPosFrame = 0;
     counter = 0;
 
     for(TimeStep=0;TimeStep<nt;TimeStep++){
@@ -690,7 +696,7 @@ int main(){
 
         // Find where strings intercept grid faces
 
-        if(stringDetect){
+        if(stringDetect and (!detectBuffer or TimeStep>=damped_nt)){
 
             vector<double> xString, yString, zString; // Declares the vectors and clears them at every loop
 
@@ -979,133 +985,321 @@ int main(){
 
             }
 
-            // Now want to calculate the length of string by connecting these points together
-            // Need to account for the periodic boundary conditions.
-            // Find nearest neighbour to current intersection point and follow it along. If distance > sqrt(dx^2 + dy^2 + dz^2) then it does not count as a neighbour (to avoid linking disconnected strings)
+            // Determine neighbouring points of each intersection points.
+            // Need to account for periodic boundary conditions
+            // Follow the string along, connecting each point to it's nearest neighbour that hasn't already been allocated
 
-            stringLength[0] = 0;
-            stringLength[1] = 0;
-            int fInd = 0; // Index of the intersection point we are currently following
-            int initialSize = xString.size();
-            double beginCoords[3];
-            if(initialSize!=0){ beginCoords[0] = xString[fInd]; beginCoords[1] = yString[fInd]; beginCoords[2] = zString[fInd]; }
-            for(i=0;i<initialSize;i++){
+            // if(xString.size()!=0){ // Only do all this if points have actually been found
 
-                bool NextIntersectFound = false;
-                double minDistSqr = pow(dx*dx + dy*dy + dz*dz,2);
-                int indClosest;
+                cout << xString.size() << endl;
 
-                #pragma omp parallel default(none) shared(NextIntersectFound,minDistSqr,indClosest,xString,yString,zString,fInd,xyBC,zBC)
-                {
+            //     vector<vector<int>> neighbours(2, vector<int>( xString.size(),-1 ));
+            //     vector<vector<bool>> neighboursFound(2, vector<bool>( xString.size(), false ));
+            //     // int neighbours[2][xString.size()];
+            //     // bool neighboursFound[2][xString.size()];
+            //     // for(i=0;i<xString.size();i++){ neighbours[0][i] = -1; neighbours[1][i] = -1; neighboursFound[0][i] = false; neighboursFound[1][i] = false; } // Initialisation
+            //     int vInd = 0; // Index of the point we are currently visiting
+            //     int sInd = 0; // Index of the start of the line currently being followed along
+            //     vector<int> visited{0}; // Declare and initialise with just one element - 0, the first vInd
 
-                    double minDistSqr_private = pow(dx*dx + dy*dy + dz*dz,2);
-                    int indClosest_private;
+            //     for(i=0;i<xString.size();i++){
 
-                    #pragma omp for
-                    for(j=0;j<xString.size();j++){
-                        if(j!=fInd){
+            //         // Loop over all points but the point we are looking at is specified by vInd rather than i
 
-                            double distSqr = 0;
+            //         double minDistSqr = dx*dx + dy*dy + dz*dz; // Largest possible distance between two points in the same grid cell.
+            //         int nInd = 10; // Index of the next point to go to.
+            //         bool nextPointFound = false;
 
-                            if(abs(xString[fInd] - xString[j]) <= 0.5*nx*dx){ distSqr = pow(xString[fInd] - xString[j],2); }
-                            else if(xyBC == "periodic"){ distSqr = pow(nx*dx - abs(xString[fInd] - xString[j]),2); } // Accounts for periodicity, if using periodic boundaries
+            //         for(j=0;j<xString.size();j++){
+            //             if(find(visited.begin(),visited.end(),j) == visited.end()){ // Point j has not already been visited
 
-                            if(abs(yString[fInd] - yString[j]) <= 0.5*ny*dy){ distSqr += pow(yString[fInd] - yString[j],2); }
-                            else if(xyBC == "periodic"){ distSqr += pow(ny*dy - abs(yString[fInd] - yString[j]),2); }
+            //                 double distSqr = 0;
 
-                            if(abs(zString[fInd] - zString[j]) <= 0.5*nz*dz){ distSqr += pow(zString[fInd] - zString[j],2); }
-                            else if(zBC == "periodic"){ distSqr += pow(nz*dz - abs(zString[fInd] - zString[j]),2); }
+            //                 if(abs(xString[vInd] - xString[j]) >= 0.5*nx*dx and xyBC == "periodic"){ distSqr += pow(nx*dx - abs(xString[vInd] - xString[j]),2); } // Accounts for periodicity, if using periodic boundaries
+            //                 else{ distSqr += pow(xString[vInd] - xString[j],2); }
 
-                            // Now check if this is less than the last smallest distance (initially set as largest distance across the cube) and update if it is
-                            if(distSqr <= minDistSqr_private){
+            //                 if(abs(yString[vInd] - yString[j]) >= 0.5*ny*dy and xyBC == "periodic"){ distSqr += pow(ny*dy - abs(yString[vInd] - yString[j]),2); }
+            //                 else{ distSqr += pow(yString[vInd] - yString[j],2); }
 
-                                NextIntersectFound = true;
-                                minDistSqr_private = distSqr;
-                                indClosest_private = j;
+            //                 if(abs(zString[vInd] - zString[j]) >= 0.5*nz*dz and zBC == "periodic"){ distSqr += pow(nz*dz - abs(zString[vInd] - zString[j]),2); }
+            //                 else{ distSqr += pow(zString[vInd] - zString[j],2); }
 
-                            }
+            //                 // Now check if this is less than the last smallest distance (initially set as largest distance across the cube) and update if it is
+            //                 if(distSqr <= minDistSqr){
 
-                        }
-                    }
+            //                     minDistSqr = distSqr;
+            //                     nInd = j;
+            //                     nextPointFound = true;
 
-                    #pragma omp critical
-                    {
+            //                 }
 
-                        if(minDistSqr_private <= minDistSqr){
+            //             }
+            //         }
 
-                            minDistSqr = minDistSqr_private;
-                            indClosest = indClosest_private;
+            //         // Checked all other available points so now if the next point is found, move to that one, add it to the visited list and restart the process
+            //         // Also record that a neighbour has been found in relevant arrays. Neighbour arrays are organised so that [0] is incoming and [1] is outgoing
+            //         if(nextPointFound){
 
-                        }
+            //             neighbours[1][vInd] = nInd;
+            //             neighboursFound[1][vInd] = true;
 
-                    }
+            //             neighbours[0][nInd] = vInd;
+            //             neighboursFound[0][nInd] = true;
 
-                }
+            //             visited.push_back(nInd);
+            //             vInd = nInd;
 
-                // If found the next point, add the distance onto the total length of string, delete the intersection point being followed and adjust the next intersection point if needed
+            //         } else{
 
-                if(NextIntersectFound){
+            //             // If not, check to see if a loop has been completed by looking back at the first point
 
-                    if(splitLength){
+            //             double distSqr = 0;
 
-                        if(xString[fInd] >= -0.25*nx*dx && xString[fInd] <= 0.25*nx*dx && yString[fInd] >= -0.25*ny*dy && yString[fInd] <= 0.25*ny*dy && zString[fInd] >= -0.25*nz*dz &&
-                           zString[fInd] <= 0.25*nz*dz){ stringLength[0] += sqrt(minDistSqr); }
-                        else{ stringLength[1] += sqrt(minDistSqr); }
+            //             if(abs(xString[vInd] - xString[sInd]) >= 0.5*nx*dx and xyBC == "periodic"){ distSqr += pow(nx*dx - abs(xString[vInd] - xString[sInd]),2); } 
+            //             else{ distSqr += pow(xString[vInd] - xString[sInd],2); }
 
-                    } else{ stringLength[0] += sqrt(minDistSqr); }
+            //             if(abs(yString[vInd] - yString[sInd]) >= 0.5*ny*dy and xyBC == "periodic"){ distSqr += pow(ny*dy - abs(yString[vInd] - yString[sInd]),2); }
+            //             else{ distSqr += pow(yString[vInd] - yString[sInd],2); }
 
-                    xString.erase(xString.begin() + fInd);
-                    yString.erase(yString.begin() + fInd);
-                    zString.erase(zString.begin() + fInd);
+            //             if(abs(zString[vInd] - zString[sInd]) >= 0.5*nz*dz and zBC == "periodic"){ distSqr += pow(nz*dz - abs(zString[vInd] - zString[sInd]),2); }
+            //             else{ distSqr += pow(zString[vInd] - zString[sInd],2); }
 
-                    if(indClosest<fInd){ fInd = indClosest; }
-                    else{ fInd = indClosest - 1; } // if fInd is before indClosest, need to account for fInd being erased from the vector
+            //             // If less than cut-off distance, then the loop has been completed
+            //             if(distSqr <= dx*dx + dy*dy + dz*dz and vInd != sInd){
 
-                } else{
+            //                 neighbours[1][vInd] = sInd;
+            //                 neighboursFound[1][vInd] = true;
 
-                    // Check if the reason there are no nearest neighbours is because a loop has been completed.
+            //                 neighbours[0][sInd] = vInd;
+            //                 neighboursFound[0][sInd] = true;
 
-                    double distSqr = 0;
+            //             }
 
-                    if(abs(xString[fInd] - beginCoords[0]) <= 0.5*nx*dx){ distSqr = pow(xString[fInd] - beginCoords[0],2); }
-                    else if(xyBC == "periodic"){ distSqr = pow(nx*dx - abs(xString[fInd] - beginCoords[0]),2); }
+            //             // Now need to select a point that hasn't been visited yet to start the next trail with
 
-                    if(abs(yString[fInd] - beginCoords[1]) <= 0.5*ny*dy){ distSqr += pow(yString[fInd] - beginCoords[1],2); }
-                    else if(xyBC == "periodic"){ distSqr += pow(ny*dy - abs(yString[fInd] - beginCoords[1]),2); }
+            //             bool nextStartFound = false;
 
-                    if(abs(zString[fInd] - beginCoords[2]) <= 0.5*nz*dz){ distSqr += pow(zString[fInd] - beginCoords[2],2); }
-                    else if(zBC == "periodic"){ distSqr += pow(nz*dz - abs(zString[fInd] - beginCoords[2]),2); }
+            //             for(j=0;j<xString.size();j++){
+            //                 if(find(visited.begin(),visited.end(),j) == visited.end() and !nextStartFound){
 
-                    if(distSqr <= minDistSqr){ // If close enough to the starting point, count this length of string too
+            //                     vInd = j;
+            //                     sInd = j;
+            //                     nextStartFound = true;
+            //                     visited.push_back(j);
 
-                        if(splitLength){
+            //                 }
+            //             }
 
-                            if(xString[fInd] >= -0.25*nx*dx && xString[fInd] <= 0.25*nx*dx && yString[fInd] >= -0.25*ny*dy && yString[fInd] <= 0.25*ny*dy && zString[fInd] >= -0.25*nz*dz &&
-                               zString[fInd] <= 0.25*nz*dz){ stringLength[0] += sqrt(minDistSqr); }
-                            else{ stringLength[1] += sqrt(minDistSqr); }
+            //         }
 
-                        } else{ stringLength[0] += sqrt(minDistSqr); }
+            //     }
 
-                    }
+            //     // // Neighbour information should all be generated now
+            //     // // Check that both neighbours have been found and then calculate the radius of curvature at that point if so. Otherwise set it to some default - maybe 0?
 
-                    // Erase the point currently being following.
+            //     double radOfCurv[xString.size()];
+            //     for(i=0;i<xString.size();i++){
 
-                    xString.erase(xString.begin() + fInd);
-                    yString.erase(yString.begin() + fInd);
-                    zString.erase(zString.begin() + fInd);
+            //         if(neighboursFound[0][i] and neighboursFound[1][i]){
 
-                    // Start the process again by resetting fInd to zero (which will now reference a new intersection point that hasn't been used yet). 
+            //             // Calculate the length of each side of the triangle formed by this point and its neighbours
 
-                    fInd = 0; // Reset fInd
+            //             double a = 0;
+            //             double b = 0;
+            //             double c = 0;
 
-                    // Store the coordinates of the new starting point
-                    beginCoords[0] = xString[fInd];
-                    beginCoords[1] = yString[fInd];
-                    beginCoords[2] = zString[fInd];
+            //             // Calculated squared length of each side, taking periodic boundary conditions into account if they are being used.
 
-                }
+            //             if(abs(xString[i] - xString[neighbours[0][i]]) >= 0.5*nx*dx and xyBC == "periodic"){ a += pow(nx*dx - abs(xString[i] - xString[neighbours[0][i]]),2); }
+            //             else{ a += pow(xString[i] - xString[neighbours[0][i]],2); }
+            //             if(abs(yString[i] - yString[neighbours[0][i]]) >= 0.5*ny*dy and xyBC == "periodic"){ a += pow(ny*dy - abs(yString[i] - yString[neighbours[0][i]]),2); }
+            //             else{ a += pow(yString[i] - yString[neighbours[0][i]],2); }
+            //             if(abs(zString[i] - zString[neighbours[0][i]]) >= 0.5*nz*dz and zBC == "periodic"){ a += pow(nz*dz - abs(zString[i] - zString[neighbours[0][i]]),2); }
+            //             else{ a += pow(zString[i] - zString[neighbours[0][i]],2); }
 
-            }
+            //             if(abs(xString[i] - xString[neighbours[1][i]]) >= 0.5*nx*dx and xyBC == "periodic"){ b += pow(nx*dx - abs(xString[i] - xString[neighbours[1][i]]),2); }
+            //             else{ b += pow(xString[i] - xString[neighbours[1][i]],2); }
+            //             if(abs(yString[i] - yString[neighbours[1][i]]) >= 0.5*ny*dy and xyBC == "periodic"){ b += pow(ny*dy - abs(yString[i] - yString[neighbours[1][i]]),2); }
+            //             else{ b += pow(yString[i] - yString[neighbours[1][i]],2); }
+            //             if(abs(zString[i] - zString[neighbours[1][i]]) >= 0.5*nz*dz and zBC == "periodic"){ b += pow(nz*dz - abs(zString[i] - zString[neighbours[1][i]]),2); }
+            //             else{ b += pow(zString[i] - zString[neighbours[1][i]],2); }
+
+            //             if(abs(xString[neighbours[0][i]] - xString[neighbours[1][i]]) >= 0.5*nx*dx and xyBC == "periodic"){ c += pow(nx*dx - abs(xString[neighbours[0][i]] - xString[neighbours[1][i]]),2); }
+            //             else{ c += pow(xString[neighbours[0][i]] - xString[neighbours[1][i]],2); }
+            //             if(abs(yString[neighbours[0][i]] - yString[neighbours[1][i]]) >= 0.5*ny*dy and xyBC == "periodic"){ c += pow(ny*dy - abs(yString[neighbours[0][i]] - yString[neighbours[1][i]]),2); }
+            //             else{ c += pow(yString[neighbours[0][i]] - yString[neighbours[1][i]],2); }
+            //             if(abs(zString[neighbours[0][i]] - zString[neighbours[1][i]]) >= 0.5*nz*dz and zBC == "periodic"){ c += pow(nz*dz - abs(zString[neighbours[0][i]] - zString[neighbours[1][i]]),2); }
+            //             else{ c += pow(zString[neighbours[0][i]] - zString[neighbours[1][i]],2); }
+
+            //             // Now take the square route to get the actual length.
+            //             a = sqrt(a);
+            //             b = sqrt(b);
+            //             c = sqrt(c);
+
+            //             // Calculate the radius of the circle that circumscribes this triangle. It will be the radius of curvature except in extreme circumstances
+            //             // where the curvature is large and the resolution inadequete.
+            //             // For the case of colinear points, radOfCurv will diverge but hopefully this won't be a problem and just indicates that the string is straight.
+
+            //             radOfCurv[i] = a*b*c/sqrt( (a+b+c)*(-a+b+c)*(a-b+c)*(a+b-c) );
+
+            //         } else{
+
+            //             // Can't calculate the radius of curvature with neighbour information so just set it to some default value
+
+            //             radOfCurv[i] = 0;
+
+            //         }
+
+            //     }
+
+            //     if(makeStringPosGif and TimeStep%saveFreq == 0){
+
+            //         ss.str(string());
+            //         ss << gifStringPosFrame;
+            //         string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + ss.str() + ".txt";
+            //         ofstream gifStringPosData (gifStringPosDataPath.c_str());
+            //         gifStringPosFrame+=1;
+
+            //         for(i=0;i<xString.size();i++){
+
+            //             gifStringPosData << xString[i] << " " << yString[i] << " " << zString[i] << " " << radOfCurv[i] << " " << neighbours[0][i] << " " << neighbours[1][i] << " " 
+            //                              << neighboursFound[0][i] << " " << neighboursFound[1][i] << endl;
+
+            //         }
+            //     }
+
+            // }
+
+
+            ///////////////////// Old method for calculating string length without storing neighbour information /////////////////////////////////////////////
+
+            // // Now want to calculate the length of string by connecting these points together
+            // // Need to account for the periodic boundary conditions.
+            // // Find nearest neighbour to current intersection point and follow it along. If distance > sqrt(dx^2 + dy^2 + dz^2) then it does not count as a neighbour (to avoid linking disconnected strings)
+
+            // stringLength[0] = 0;
+            // stringLength[1] = 0;
+            // int fInd = 0; // Index of the intersection point we are currently following
+            // int initialSize = xString.size();
+            // double beginCoords[3];
+            // if(initialSize!=0){ beginCoords[0] = xString[fInd]; beginCoords[1] = yString[fInd]; beginCoords[2] = zString[fInd]; }
+            // for(i=0;i<initialSize;i++){
+
+            //     bool NextIntersectFound = false;
+            //     double minDistSqr = pow(dx*dx + dy*dy + dz*dz,2);
+            //     int indClosest;
+
+            //     #pragma omp parallel default(none) shared(NextIntersectFound,minDistSqr,indClosest,xString,yString,zString,fInd,xyBC,zBC)
+            //     {
+
+            //         double minDistSqr_private = pow(dx*dx + dy*dy + dz*dz,2);
+            //         int indClosest_private;
+
+            //         #pragma omp for
+            //         for(j=0;j<xString.size();j++){
+            //             if(j!=fInd){
+
+            //                 double distSqr = 0;
+
+            //                 if(abs(xString[fInd] - xString[j]) <= 0.5*nx*dx){ distSqr = pow(xString[fInd] - xString[j],2); }
+            //                 else if(xyBC == "periodic"){ distSqr = pow(nx*dx - abs(xString[fInd] - xString[j]),2); } // Accounts for periodicity, if using periodic boundaries
+
+            //                 if(abs(yString[fInd] - yString[j]) <= 0.5*ny*dy){ distSqr += pow(yString[fInd] - yString[j],2); }
+            //                 else if(xyBC == "periodic"){ distSqr += pow(ny*dy - abs(yString[fInd] - yString[j]),2); }
+
+            //                 if(abs(zString[fInd] - zString[j]) <= 0.5*nz*dz){ distSqr += pow(zString[fInd] - zString[j],2); }
+            //                 else if(zBC == "periodic"){ distSqr += pow(nz*dz - abs(zString[fInd] - zString[j]),2); }
+
+            //                 // Now check if this is less than the last smallest distance (initially set as largest distance across the cube) and update if it is
+            //                 if(distSqr <= minDistSqr_private){
+
+            //                     NextIntersectFound = true;
+            //                     minDistSqr_private = distSqr;
+            //                     indClosest_private = j;
+
+            //                 }
+
+            //             }
+            //         }
+
+            //         #pragma omp critical
+            //         {
+
+            //             if(minDistSqr_private <= minDistSqr){
+
+            //                 minDistSqr = minDistSqr_private;
+            //                 indClosest = indClosest_private;
+
+            //             }
+
+            //         }
+
+            //     }
+
+            //     // If found the next point, add the distance onto the total length of string, delete the intersection point being followed and adjust the next intersection point if needed
+
+            //     if(NextIntersectFound){
+
+            //         if(splitLength){
+
+            //             if(xString[fInd] >= -0.25*nx*dx && xString[fInd] <= 0.25*nx*dx && yString[fInd] >= -0.25*ny*dy && yString[fInd] <= 0.25*ny*dy && zString[fInd] >= -0.25*nz*dz &&
+            //                zString[fInd] <= 0.25*nz*dz){ stringLength[0] += sqrt(minDistSqr); }
+            //             else{ stringLength[1] += sqrt(minDistSqr); }
+
+            //         } else{ stringLength[0] += sqrt(minDistSqr); }
+
+            //         xString.erase(xString.begin() + fInd);
+            //         yString.erase(yString.begin() + fInd);
+            //         zString.erase(zString.begin() + fInd);
+
+            //         if(indClosest<fInd){ fInd = indClosest; }
+            //         else{ fInd = indClosest - 1; } // if fInd is before indClosest, need to account for fInd being erased from the vector
+
+            //     } else{
+
+            //         // Check if the reason there are no nearest neighbours is because a loop has been completed.
+
+            //         double distSqr = 0;
+
+            //         if(abs(xString[fInd] - beginCoords[0]) <= 0.5*nx*dx){ distSqr = pow(xString[fInd] - beginCoords[0],2); }
+            //         else if(xyBC == "periodic"){ distSqr = pow(nx*dx - abs(xString[fInd] - beginCoords[0]),2); }
+
+            //         if(abs(yString[fInd] - beginCoords[1]) <= 0.5*ny*dy){ distSqr += pow(yString[fInd] - beginCoords[1],2); }
+            //         else if(xyBC == "periodic"){ distSqr += pow(ny*dy - abs(yString[fInd] - beginCoords[1]),2); }
+
+            //         if(abs(zString[fInd] - beginCoords[2]) <= 0.5*nz*dz){ distSqr += pow(zString[fInd] - beginCoords[2],2); }
+            //         else if(zBC == "periodic"){ distSqr += pow(nz*dz - abs(zString[fInd] - beginCoords[2]),2); }
+
+            //         if(distSqr <= minDistSqr){ // If close enough to the starting point, count this length of string too
+
+            //             if(splitLength){
+
+            //                 if(xString[fInd] >= -0.25*nx*dx && xString[fInd] <= 0.25*nx*dx && yString[fInd] >= -0.25*ny*dy && yString[fInd] <= 0.25*ny*dy && zString[fInd] >= -0.25*nz*dz &&
+            //                    zString[fInd] <= 0.25*nz*dz){ stringLength[0] += sqrt(minDistSqr); }
+            //                 else{ stringLength[1] += sqrt(minDistSqr); }
+
+            //             } else{ stringLength[0] += sqrt(minDistSqr); }
+
+            //         }
+
+            //         // Erase the point currently being following.
+
+            //         xString.erase(xString.begin() + fInd);
+            //         yString.erase(yString.begin() + fInd);
+            //         zString.erase(zString.begin() + fInd);
+
+            //         // Start the process again by resetting fInd to zero (which will now reference a new intersection point that hasn't been used yet). 
+
+            //         fInd = 0; // Reset fInd
+
+            //         // Store the coordinates of the new starting point
+            //         beginCoords[0] = xString[fInd];
+            //         beginCoords[1] = yString[fInd];
+            //         beginCoords[2] = zString[fInd];
+
+            //     }
+
+            // }
 
         }
 
@@ -1201,14 +1395,16 @@ int main(){
 
     cout << "\rTimestep " << nt << " completed." << endl;
 
-    for(i=0;i<nx;i++){
-        for(j=0;j<ny;j++){
-            for(k=0;k<nz;k++){
+    if(finalOut){
+        for(i=0;i<nx;i++){
+            for(j=0;j<ny;j++){
+                for(k=0;k<nz;k++){
 
-                finalField << phi(0,tPast,i,j,k) << " " << phi(1,tPast,i,j,k) << " " << theta(0,tPast,i,j,k) << " " << theta(1,tPast,i,j,k) << " " << theta(2,tPast,i,j,k) << endl;
-                powerdensityOut << powerdensity(i,j,k) << endl;
-                test1 << energydensity(tNow,i,j,k) << endl;
+                    finalField << phi(0,tPast,i,j,k) << " " << phi(1,tPast,i,j,k) << " " << theta(0,tPast,i,j,k) << " " << theta(1,tPast,i,j,k) << " " << theta(2,tPast,i,j,k) << endl;
+                    powerdensityOut << powerdensity(i,j,k) << endl;
+                    test1 << energydensity(tNow,i,j,k) << endl;
 
+                }
             }
         }
     }
