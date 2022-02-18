@@ -34,7 +34,7 @@ const double dz = 0.5;
 const double dt = 0.05;
 
 const int n = 1; // This is useless for now, code assumes it is 1.
-const double g = 0;
+const double g = 0.5;
 
 const double pi = 4*atan(1);
 
@@ -693,9 +693,9 @@ int main(){
 
                     //     // Gauge fields scaled by 1/g to try to account for "natural magnitude" of field. May need to adjust the way this is done
 
-                    //     A(0,i,j,k) = unif_rand(eng)/g;
-                    //     A(1,i,j,k) = unif_rand(eng)/g;
-                    //     A(2,i,j,k) = unif_rand(eng)/g;
+                    //     A(0,i,j,k) = distribution(generator)/g;
+                    //     A(1,i,j,k) = distribution(generator)/g;
+                    //     A(2,i,j,k) = distribution(generator)/g;
 
                     // }
 

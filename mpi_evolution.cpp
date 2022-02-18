@@ -16,7 +16,7 @@ const int nx = 11;
 const int ny = 11;
 const int nz = 11;
 const int nPos = nx*ny*nz;
-const int nt = 1;
+const int nt = 10001;
 const double dx = 0.5;
 const double dy = 0.5;
 const double dz = 0.5;
@@ -24,7 +24,7 @@ const double dt = 0.05;
 
 const double lambda = 1;
 const double eta = 1;
-const double g = 0;
+const double g = 0.5;
 
 const int damped_nt = 200; // Number of time steps for which damping is imposed. Useful for random initial conditions
 const double dampFac = 0.5; // magnitude of damping term, unclear how strong to make this
@@ -81,8 +81,8 @@ int main(int argc, char ** argv){
 	cout << "Rank: " << rank << ", coreSize: " << coreSize << endl; 
 
 	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0), phitt(2*coreSize, 0.0), thetatt(3*coreSize, 0.0), energydensity(coreSize, 0.0), gaussDeviation(coreSize, 0.0);
-	double phixx,phiyy,phizz,energy,deviationParameter,damp,phit[2],phiMagSqr;
-	int x0,y0,z0,i,j,k,TimeStep,gifStringPosFrame,tNow,tPast,counter,comp,imx,ipx,imy,ipy,imz,ipz;
+	double phixx,phiyy,phizz,energy,deviationParameter,damp,phit[2],phiMagSqr,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y;
+	int x0,y0,z0,i,j,k,TimeStep,gifStringPosFrame,tNow,tPast,counter,comp,imx,ipx,imy,ipy,imz,ipz,ipxmy,ipxmz,imxpy,ipymz,imxpz,imypz;
 	int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
 
 	struct timeval start, end;
@@ -283,7 +283,7 @@ int main(int argc, char ** argv){
 
         double time = 1 + TimeStep*dt; // Conformal time, starting at eta = 1.
 
-        if(TimeStep>counter){
+        if(TimeStep>counter and rank==0){
 
             cout << "\rTimestep " << TimeStep-1 << " completed." << flush;
 
@@ -313,11 +313,22 @@ int main(int argc, char ** argv){
 
         	// Need to account for the periodicity of the space for the other two directions
 
-        	imy = (i+dataStart-nz+ny*nz)%(ny*nz) + ( (i+dataStart)/(ny*nz) )*ny*nz - dataStart; // Last term gives ny*nz*floor(i/(ny*nz))
+        	// Convert to global position in array to do modulo arithmetic. The second to last term gives ny*nz*floor((i+dataStart)/(ny*nz)). The last term converts back to the position in the local array 
+
+        	imy = (i+dataStart-nz+ny*nz)%(ny*nz) + ( (i+dataStart)/(ny*nz) )*ny*nz - dataStart; 
         	ipy = (i+dataStart+nz)%(ny*nz) + ( (i+dataStart)/(ny*nz) )*ny*nz - dataStart;
 
         	imz = (i+dataStart-1+nz)%nz + ( (i+dataStart)/nz )*nz - dataStart;
         	ipz = (i+dataStart+1)%nz + ( (i+dataStart)/nz )*nz - dataStart;
+
+        	// Additionally needed for wilson loop calculations. Avoid using x shifted points first as this makes the calculations more complicated and some of these points aren't in the correct positions
+
+        	ipxmy = imy+ny*nz;
+        	ipxmz = imz+ny*nz;
+        	imxpy = ipy-ny*nz;
+        	ipymz = (ipy+dataStart-1+nz)%nz + ( (ipy+dataStart)/nz )*nz - dataStart;
+        	imxpz = ipz-ny*nz;
+        	imypz = (imy+dataStart+1)%nz + ( (imy+dataStart)/nz )*nz - dataStart;
 
 	        phiMagSqr = pow(phi[totSize*tNow+i],2) + pow(phi[totSize*(nts+tNow)+i],2);
 
@@ -375,7 +386,7 @@ int main(int argc, char ** argv){
                    sin(theta[totSize*(nts*2+tNow)+i])*(phi[totSize*tNow+i]*phi[totSize*tNow+ipz] + phi[totSize*(nts+tNow)+i]*phi[totSize*(nts+tNow)+ipz]);
 
 
-            // Calculate the derivatives of the field tensor (lattice version). Additionally need ipxmy,ipxmz,imxpy
+            // Calculate the derivatives of the field tensor (lattice version).
 
             Fxy_y = ( sin(theta[totSize*tNow+i] + theta[totSize*(nts+tNow)+ipx] - theta[totSize*tNow+ipy] - theta[totSize*(nts+tNow)+i]) - 
                       sin(theta[totSize*tNow+imy] + theta[totSize*(nts+tNow)+ipxmy] - theta[totSize*tNow+i] - theta[totSize*(nts+tNow)+imy]) )/(dy*dy);
@@ -386,268 +397,113 @@ int main(int argc, char ** argv){
             Fyx_x = ( sin(theta[totSize*(nts+tNow)+i] + theta[totSize*tNow+ipy] - theta[totSize*(nts+tNow)+ipx] - theta[totSize*tNow+i]) -
                       sin(theta[totSize*(nts+tNow)+imx] + theta[totSize*tNow+imxpy] - theta[totSize*(nts+tNow)+i] - theta[totSize*tNow+imx]) )/(dx*dx);
 
-            Fyz_z = ( sin(theta[totSize*(nts+tNow)+i] + theta[totSize*(nts*2+tNow)+ipy] - theta[totSize*(nts+tNow)+ipz] - theta(2,tNow,i,j,k)) -
-                      sin(theta(1,tNow,i,j,km) + theta(2,tNow,i,jp,km) - theta(1,tNow,i,j,k) - theta(2,tNow,i,j,km)) )/(dz*dz);
+            Fyz_z = ( sin(theta[totSize*(nts+tNow)+i] + theta[totSize*(nts*2+tNow)+ipy] - theta[totSize*(nts+tNow)+ipz] - theta[totSize*(nts*2+tNow)+i]) -
+                      sin(theta[totSize*(nts+tNow)+imz] + theta[totSize*(nts*2+tNow)+ipymz] - theta[totSize*(nts+tNow)+i] - theta[totSize*(nts*2+tNow)+imz]) )/(dz*dz);
 
-            Fzx_x = ( sin(theta(2,tNow,i,j,k) + theta(0,tNow,i,j,kp) - theta(2,tNow,ip,j,k) - theta(0,tNow,i,j,k)) -
-                      sin(theta(2,tNow,im,j,k) + theta(0,tNow,im,j,kp) - theta(2,tNow,i,j,k) - theta(0,tNow,im,j,k)) )/(dx*dx);
+            Fzx_x = ( sin(theta[totSize*(nts*2+tNow)+i] + theta[totSize*tNow+ipz] - theta[totSize*(nts*2+tNow)+ipx] - theta[totSize*tNow+i]) -
+                      sin(theta[totSize*(nts*2+tNow)+imx] + theta[totSize*tNow+imxpz] - theta[totSize*(nts*2+tNow)+i] - theta[totSize*tNow+imx]) )/(dx*dx);
 
-            Fzy_y = ( sin(theta(2,tNow,i,j,k) + theta(1,tNow,i,j,kp) - theta(2,tNow,i,jp,k) - theta(1,tNow,i,j,k)) -
-                      sin(theta(2,tNow,i,jm,k) + theta(1,tNow,i,jm,kp) - theta(2,tNow,i,j,k) - theta(1,tNow,i,jm,k)) )/(dy*dy);
+            Fzy_y = ( sin(theta[totSize*(nts*2+tNow)+i] + theta[totSize*(nts+tNow)+ipz] - theta[totSize*(nts*2+tNow)+ipy] - theta[totSize*(nts+tNow)+i]) -
+                      sin(theta[totSize*(nts*2+tNow)+imy] + theta[totSize*(nts+tNow)+imypz] - theta[totSize*(nts*2+tNow)+i] - theta[totSize*(nts+tNow)+imy]) )/(dy*dy);
 
-            thetatt(0,i,j,k) = -2*g*g*curx - Fxy_y - Fxz_z - damp*( theta(0,tNow,i,j,k) - theta(0,tPast,i,j,k) )/dt;
-            thetatt(1,i,j,k) = -2*g*g*cury - Fyx_x - Fyz_z - damp*( theta(1,tNow,i,j,k) - theta(1,tPast,i,j,k) )/dt;
-            thetatt(2,i,j,k) = -2*g*g*curz - Fzx_x - Fzy_y - damp*( theta(2,tNow,i,j,k) - theta(2,tPast,i,j,k) )/dt;
+            thetatt[i-haloSize] = -2*g*g*curx - Fxy_y - Fxz_z - damp*( theta[totSize*tNow+i] - theta[totSize*tPast+i] )/dt;
+            thetatt[coreSize+i-haloSize] = -2*g*g*cury - Fyx_x - Fyz_z - damp*( theta[totSize*(nts+tNow)+i] - theta[totSize*(nts+tPast)+i] )/dt;
+            thetatt[coreSize*2+i-haloSize] = -2*g*g*curz - Fzx_x - Fzy_y - damp*( theta[totSize*(nts*2+tNow)+i] - theta[totSize*(nts*2+tPast)+i] )/dt;
 
         }
 
-        if(rank==0){
+        // Update the core
 
-        	vector<double> phixxOut(2*nPos,0.0), phiyyOut(2*nPos,0.0), phizzOut(2*nPos,0.0), phittOut(2*nPos,0.0);
-        	for(i=0;i<coreSize;i++){ phixxOut[i] = phixxVec[i]; phixxOut[nPos+i] = phixxVec[coreSize+i]; phiyyOut[i] = phiyyVec[i]; phiyyOut[nPos+i] = phiyyVec[coreSize+i]; phizzOut[i] = phizzVec[i]; phizzOut[nPos+i] = phizzVec[coreSize+i]; phittOut[i] = phitt[i]; phittOut[nPos+i] = phitt[coreSize+i]; }
+        for(i=haloSize;i<coreSize+haloSize;i++){
 
-        	for(i=1;i<size;i++){
+        	for(comp=0;comp<2;comp++){
 
-        		int localCoreStart;
-        		int localCoreSize;
-        		if(i<chunkRem){ localCoreStart = i*(chunk+1); localCoreSize = chunk+1; }
-        		else{ localCoreStart = i*chunk + chunkRem; localCoreSize = chunk; }
+        		phi[totSize*(nts*comp+tPast)+i] = 2*phi[totSize*(nts*comp+tNow)+i] - phi[totSize*(nts*comp+tPast)+i] + dt*dt*phitt[coreSize*comp+i-haloSize];
 
-				MPI_Recv(&phixxOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-				MPI_Recv(&phixxOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); 
+        	}
 
-				MPI_Recv(&phiyyOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-				MPI_Recv(&phiyyOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); 
+        	for(comp=0;comp<3;comp++){
 
-				MPI_Recv(&phizzOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-				MPI_Recv(&phizzOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        		theta[totSize*(nts*comp+tPast)+i] = 2*theta[totSize*(nts*comp+tNow)+i] - theta[totSize*(nts*comp+tPast)+i] + dt*dt*thetatt[coreSize*comp+i-haloSize];
 
-				MPI_Recv(&phittOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-				MPI_Recv(&phittOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);  
+        	}
 
-			}
+        }
 
-        	for(i=0;i<nPos;i++){ testMerge << phixxOut[i] << " " << phixxOut[nPos+i] << " " << phiyyOut[i] << " " << phiyyOut[nPos+i] << " " << phizzOut[i] << " " << phizzOut[nPos+i] << " " << phittOut[i] << " " << phittOut[nPos+i] << endl; }
+        // Send sections of the core that are haloes for the other processes across to the relevant process. Then receive data for the halo of this process.
 
-        	// testArray[1] = 10;
+        for(comp=0;comp<2;comp++){ 
 
-        	// cout << *foo << " " << *foo2 << endl;
+        	MPI_Send(&phi[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD);
+        	MPI_Send(&phi[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD);
+
+        	MPI_Recv(&phi[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        	MPI_Recv(&phi[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+        }
+
+        for(comp=0;comp<3;comp++){ 
+
+        	MPI_Send(&theta[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD);
+        	MPI_Send(&theta[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD);
+
+        	MPI_Recv(&theta[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        	MPI_Recv(&theta[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+        }
+
+        // Code for testing the output
+
+        if(TimeStep==nt-1){
+
+	        if(rank==0){
+
+	        	vector<double> phittOut(2*nPos,0.0), thetattOut(3*nPos,0.0);
+	        	for(i=0;i<coreSize;i++){ phittOut[i] = phitt[i]; phittOut[nPos+i] = phitt[coreSize+i]; thetattOut[i] = thetatt[i]; thetattOut[nPos+i] = thetatt[coreSize+i]; thetattOut[2*nPos+i] = thetatt[2*coreSize+i]; }
+
+	        	for(i=1;i<size;i++){
+
+	        		int localCoreStart;
+	        		int localCoreSize;
+	        		if(i<chunkRem){ localCoreStart = i*(chunk+1); localCoreSize = chunk+1; }
+	        		else{ localCoreStart = i*chunk + chunkRem; localCoreSize = chunk; }
+
+	        		MPI_Recv(&phittOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&phittOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+	        		MPI_Recv(&thetattOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&thetattOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&thetattOut[2*nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);  
+
+				}
+
+	        	for(i=0;i<nPos;i++){ testMerge << phittOut[i] << " " << phittOut[nPos+i] << " " << thetattOut[i] << " " << thetattOut[nPos+i] << " " << thetattOut[2*nPos+i] << endl; }
+
+	        	// testArray[1] = 10;
+
+	        	// cout << *foo << " " << *foo2 << endl;
 
 
-        } else{ MPI_Send(&phixxVec[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phixxVec[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phiyyVec[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phiyyVec[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phizzVec[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phizzVec[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phitt[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phitt[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); }
+	        } else{ MPI_Send(&phitt[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phitt[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[2*coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); }
 
+		}
 
-        //MPI_Send( message_r1, 13, MPI_CHAR, 1, 0, MPI_COMM_WORLD );
+    // Barrier before going to the next timestep. Not sure if strictly neccessary but I'm a paranoid man.
 
+    MPI_Barrier(MPI_COMM_WORLD);
 
     }
 
+    if(rank==0){
 
- //    if(rank==0){
+	    cout << "\rTimestep " << nt << " completed." << endl;
 
- //    	int coreSize;
- //    	int haloSize = 2*nz*ny;
- //    	if(rank>=chunkRem){ coreSize = chunk; }
- //    	else{ coreSize = chunk+1; }
- //    	int totSize = coreSize + haloSize;
+	    gettimeofday(&end,NULL);
 
- //    	cout << "Rank: " << rank << ", coreSize: " << coreSize << endl; 
+	    cout << "Time taken: " << end.tv_sec - start.tv_sec << "s" << endl;
 
-	// 	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0), phitt(2*totSize, 0.0), thetatt(3*totSize, 0.0), energydensity(totSize, 0.0), gaussDeviation(totSize, 0.0);
-	// 	double energy,deviationParameter,damp;
-	// 	int x0,y0,z0,i,j,k,TimeStep,gifStringPosFrame,tNow,tPast,counter;
+	}
 
-	// 	struct timeval start, end;
-	//     gettimeofday(&start, NULL);
-
-	//     string file_path = __FILE__;
-	//     string dir_path = file_path.substr(0,file_path.find_last_of('/'));
-	//     stringstream ss;
-
-	//     string input;
-	//     cout << "Enter a tag for output files: " << flush;
-	//     cin >> input;
-
-	//     MPI_Barrier(MPI_COMM_WORLD); // Allows all other processes to start once user input has been received.
-
-	//     string icPath = dir_path + "/Data/ic.txt";
-	//     string finalFieldPath = dir_path + "/Data/finalField.txt";
-	//     string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + input + ".txt";
-	//     string testPath = dir_path + "/Data/test.txt";
-
-	//     ifstream ic (icPath.c_str());
-	//     ofstream finalField (finalFieldPath.c_str());
-	//     ofstream valsPerLoop (valsPerLoopPath.c_str());
-	//     ofstream test (testPath.c_str());
-
-	//     x0 = int(0.5*(nx-1));
-	//     y0 = int(0.5*(ny-1));
-	//     z0 = int(0.5*(nz-1));
-
-	//     double remCont1, remCont2;
-	//     if(rank < chunkRem){ remCont1 = rank; remCont2 = rank+1; }
-	//     else{ remCont1 = chunkRem; remCont2 = chunkRem; }
-	//     double wasteData[5];
-
-	//     if(stationary_ic){
-
-	//     	for(i=0;i<nx*ny*nz;i++){
-
-	//     		// Only assign it to the local array if this point belongs to the core or halo. Otherwise just waste it.
-
-	//     		// Master process always starts at 0 and has to deal with the halo being wrapped to the other side of the array
-
-	//     		if(i<(rank+1)*chunk+remCont2 + ny*nz){
-
-	//     			// Calculating index with totSize*(nTimeSteps*comp + TimeStep) + pos and shifting across by the size of the first half of the halo
-
-	//     			ic >> phi[i+ny*nz] >> phi[totSize*2*1+i+ny*nz] >> theta[i+ny*nz] >> theta[totSize*2*1+i+ny*nz] >> theta[totSize*2*2+i+ny*nz];
-
-	//     			// Second time step is equal to the first
-
-	//     			phi[totSize+i+ny*nz] = phi[i+ny*nz];
-	//     			phi[totSize*(2*1+1)+i+ny*nz] = phi[totSize*2*1+i+ny*nz];
-	//     			theta[totSize+i+ny*nz] = theta[i+ny*nz];
-	//     			theta[totSize*(2*1+1)+i+ny*nz] = theta[totSize*2*1+i+ny*nz];
-	//     			theta[totSize*(2*2+1)+i+ny*nz] = theta[totSize*2*2+i+ny*nz];
-
-	//     			//test << i+ny*nz << endl << totSize*2*1+i+ny*nz << endl << totSize*2*2+i+ny*nz << endl << totSize+i+ny*nz << endl << totSize*(2*1+1)+i+ny*nz << endl << totSize*(2*2+1)+i+ny*nz << endl;
-
-	//     		} else if(i>=nx*ny*nz - ny*nz){
-
-	//     			// Same index calculation as above but want to now allocate the first half of the halo to the beginning of the array
-
-	//     			ic >> phi[i-nx*ny*nz+ny*nz] >> phi[totSize*2*1+i-nx*ny*nz+ny*nz] >> theta[i-nx*ny*nz+ny*nz] >> theta[totSize*2*1+i-nx*ny*nz+ny*nz] >> theta[totSize*2*2+i-nx*ny*nz+ny*nz];
-
-	//     			phi[totSize+i-nx*ny*nz+ny*nz] = phi[i-nx*ny*nz+ny*nz];
-	//     			phi[totSize*(2*1+1)+i-nx*ny*nz+ny*nz] = phi[totSize*2*1+i-nx*ny*nz+ny*nz];
-	//     			theta[totSize+i+ny*nz] = theta[i+ny*nz];
-	//     			theta[totSize*(2*1+1)+i-nx*ny*nz+ny*nz] = theta[totSize*2*1+i-nx*ny*nz+ny*nz];
-	//     			theta[totSize*(2*2+1)+i-nx*ny*nz+ny*nz] = theta[totSize*2*2+i-nx*ny*nz+ny*nz];
-
-	//     			//test << i-nx*ny*nz+ny*nz << endl << totSize*2*1+i-nx*ny*nz+ny*nz << endl << totSize*2*2+i-nx*ny*nz+ny*nz << endl << totSize+i-nx*ny*nz+ny*nz << endl << totSize*(2*1+1)+i-nx*ny*nz+ny*nz << endl << totSize*(2*2+1)+i-nx*ny*nz+ny*nz << endl;
-
-
-	//     		} else{
-
-	//     			// Don't need these points so just throw them away into an unused variable
-
-	//     			ic >> wasteData[0] >> wasteData[1] >> wasteData[2] >> wasteData[3] >> wasteData[4];
-
-	//     		}
-
-	//     	}
-
-	//     } else{
-
-	//     	for(TimeStep=0;TimeStep<2;TimeStep++){
-	//     		for(i=0;i<nx*ny*nz;i++){
-
-	//     			if(i<(rank+1)*chunk+remCont2 + ny*nz){
-
-	//     				ic >> phi[totSize*TimeStep+i+ny*nz] >> phi[totSize*(2*1+TimeStep)+i+ny*nz] >> theta[totSize*TimeStep+i+ny*nz] >> theta[totSize*(2*1+TimeStep)+i+ny*nz] >> theta[totSize*(2*2+TimeStep)+i+ny*nz];
-
-	//     			} else if(i>=nx*ny*nz - ny*nz){
-
-	//     				ic >> phi[totSize*TimeStep+i-nx*ny*nz+ny*nz] >> phi[totSize*(2*1+TimeStep)+i-nx*ny*nz+ny*nz] >> theta[totSize*TimeStep+i-nx*ny*nz+ny*nz]
-	//     				   >> theta[totSize*(2*1+TimeStep)+i-nx*ny*nz+ny*nz] >> theta[totSize*(2*2+TimeStep)+i-nx*ny*nz+ny*nz];
-
-	//     			}
-
-	//     		}
-	//     	}
-
-	//     }
-
-	//     // All relevant data loaded. Now evolve these points.
-
-	//     gifStringPosFrame = 0;
-	//     counter = 0;
-
-	//     for(TimeStep=0;TimeStep<1;TimeStep++){
-
-	//         double time = 1 + TimeStep*dt; // Conformal time, starting at eta = 1.
-
-	//         if(TimeStep>counter){
-
-	//             cout << "\rTimestep " << TimeStep-1 << " completed." << flush;
-
-	//             counter += countRate;
-
-	//         }
-
-	//         // Is damping switched on or not?
-	//         if(TimeStep<damped_nt){ damp = dampFac; }
-	//         else{ damp = 0; }
-
-	//         tNow = (TimeStep+1)%2;
-	//         tPast = TimeStep%2;
-
-
-	//         // Calculate time derivatives using EoMs
-
-	//         energy = 0;
-	//         deviationParameter = 0;
-
-
-	//         //MPI_Send( message_r1, 13, MPI_CHAR, 1, 0, MPI_COMM_WORLD );
-
-
-	//     }
-
-	// } else{
-
-	// 	int coreSize;
- //    	int haloSize = 2*nz*ny;
- //    	if(rank>=chunkRem){ coreSize = chunk; }
- //    	else{ coreSize = chunk+1; }
- //    	int totSize = coreSize + haloSize;
-
- //    	cout << "Rank: " << rank << ", coreSize: " << coreSize << endl; 
-
-	// 	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0), phitt(2*totSize, 0.0), thetatt(3*totSize, 0.0), energydensity(totSize, 0.0), gaussDeviation(totSize, 0.0);
-
-	// 	MPI_Barrier(MPI_COMM_WORLD); // Wait for user input from master process.
-
-	// 	string file_path = __FILE__;
-	// 	string dir_path = file_path.substr(0,file_path.find_last_of('/'));
-	// 	string icPath = dir_path + "/Data/ic.txt";
-	// 	ifstream ic (icPath.c_str());
-
-	// 	int i,j,k,TimeStep;
-
-	//     if(stationary_ic){
-
-	//         for(i=0;i<nx;i++){
-	//             for(j=0;j<ny;j++){
-	//                 for(k=0;k<nz;k++){
-
-	//                 	double inData[5];
-
-	//                     ic >> inData[0] >> inData[1] >> inData[2] >> inData[3] >> inData[4];
-
-	//                 }
-	//             }
-	//         }
-
-	//     } else{
-
-	//         for(TimeStep=0;TimeStep<2;TimeStep++){
-	//             for(i=0;i<nx;i++){
-	//                 for(j=0;j<ny;j++){
-	//                     for(k=0;k<nz;k++){
-
-	//                         //ic >> phi[calcInd(0,TimeStep,i,j,k)] >> phi[calcInd(1,TimeStep,i,j,k)] >> theta[calcInd(0,TimeStep,i,j,k)] >> theta[calcInd(1,TimeStep,i,j,k)] >> theta[calcInd(2,TimeStep,i,j,k)];
-
-	//                     }
-	//                 }
-	//             }
-	//         }
-
-	//     }
-
-
-	// }
 
     MPI_Finalize();
 

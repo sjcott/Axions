@@ -23,7 +23,7 @@ using namespace std;
 const int nx = 11;
 const int ny = 11;
 const int nz = 11;
-const int nt = 1;
+const int nt = 10001;
 const double dx = 0.5;
 const double dy = 0.5;
 const double dz = 0.5;
@@ -31,7 +31,7 @@ const double dt = 0.05;
 
 const double lambda = 1;
 const double eta = 1;
-const double g = 0;
+const double g = 0.5;
 
 const int damped_nt = 200; // Number of time steps for which damping is imposed. Useful for random initial conditions
 const double dampFac = 0.5; // magnitude of damping term, unclear how strong to make this
@@ -60,7 +60,7 @@ const bool finalOut = false;
 
 int main(){
 
-	Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0), phixxOut(2,nx,ny,nz,0.0), phiyyOut(2,nx,ny,nz,0.0), phizzOut(2,nx,ny,nz,0.0);
+	Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0);
 	int comp, i, j, k, TimeStep, gifFrame, gifStringPosFrame, tNow, tPast, s, counter, x0, y0, z0, xEdge1, xEdge2, yEdge1, yEdge2, zEdge1, zEdge2, im, jm, km, ip, jp, kp;
     double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], curx, cury, curz, Fxy_y, Fxz_z, Fyx_x, Fyz_z, Fzx_x, Fzy_y, phit[2], energy, phitx, phity, thetat[3], divTheta[2], divThetat,
            thetaDotCont, Fxy, Fxz, Fyz, FCont, deviationParameter, thetaxx, thetayy, thetazz, thetatx, thetaty, damp, stringLength[2];
@@ -271,7 +271,7 @@ int main(){
         deviationParameter = 0;
 
         #pragma omp parallel for reduction(+:energy,deviationParameter) default(none) shared(phi,theta,phitt,thetatt,energydensity,powerdensity,gaussDeviation,tNow,tPast,c,TimeStep,damp,xEdge1, \
-        xEdge2,yEdge1,yEdge2,zEdge1,zEdge2, time, phixxOut, phiyyOut, phizzOut) \
+        xEdge2,yEdge1,yEdge2,zEdge1,zEdge2, time) \
         private(phiMagSqr,phixx,phiyy,phizz,j,k,comp,phix,phiy,phiz,phit,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y,divTheta,divThetat,thetat,thetaDotCont,Fxy,Fxz,Fyz,FCont,im,jm,km,ip,jp,kp)
 
         for(i=xEdge1;i<xEdge2;i++){
@@ -309,10 +309,6 @@ int main(){
                         
                         phizz = ( cos(theta(2,tNow,i,j,k))*phi(comp,tNow,i,j,kp) + c[comp]*sin(theta(2,tNow,i,j,k))*phi(comp+c[comp],tNow,i,j,kp) - 2*phi(comp,tNow,i,j,k) 
                                 + cos(theta(2,tNow,i,j,km))*phi(comp,tNow,i,j,km) - c[comp]*sin(theta(2,tNow,i,j,km))*phi(comp+c[comp],tNow,i,j,km) )/(dz*dz);
-
-                        phixxOut(comp,i,j,k) = phixx;
-                        phiyyOut(comp,i,j,k) = phiyy;
-                        phizzOut(comp,i,j,k) = phizz;
 
 
                         phit[comp] = ( phi(comp,tNow,i,j,k) - phi(comp,tPast,i,j,k) )/dt;
@@ -434,12 +430,14 @@ int main(){
             }
         }
 
-        for(i=0;i<nx;i++){
-            for(j=0;j<ny;j++){
-                for(k=0;k<nz;k++){
+        if(TimeStep==nt-1){
+            for(i=0;i<nx;i++){
+                for(j=0;j<ny;j++){
+                    for(k=0;k<nz;k++){
 
-                    testmp << phixxOut(0,i,j,k) << " " << phixxOut(1,i,j,k) << " " << phiyyOut(0,i,j,k) << " " << phiyyOut(1,i,j,k) << " " << phizzOut(0,i,j,k) << " " << phizzOut(1,i,j,k) << " " << phitt(0,i,j,k) << " " << phitt(1,i,j,k) << endl;
+                        testmp << phitt(0,i,j,k) << " " << phitt(1,i,j,k) << " " << thetatt(0,i,j,k) << " " << thetatt(1,i,j,k) << " " << thetatt(2,i,j,k) << endl;
 
+                    }
                 }
             }
         }
