@@ -20,10 +20,10 @@ using namespace std;
 
 // Some parts of code may assume nx,ny and nz are odd numbers
 
-const int nx = 201;
-const int ny = 201;
-const int nz = 201;
-const int nt = 3001;
+const int nx = 11;
+const int ny = 11;
+const int nz = 11;
+const int nt = 1;
 const double dx = 0.5;
 const double dy = 0.5;
 const double dz = 0.5;
@@ -33,8 +33,14 @@ const double lambda = 1;
 const double eta = 1;
 const double g = 0;
 
-const int damped_nt = 100; // Number of time steps for which damping is imposed. Useful for random initial conditions
-const double dampFac = 1; // magnitude of damping term, unclear how strong to make this
+const int damped_nt = 200; // Number of time steps for which damping is imposed. Useful for random initial conditions
+const double dampFac = 0.5; // magnitude of damping term, unclear how strong to make this
+
+// Below has not been implemented for gauge fields yet - so only works with global strings.
+// Set alpha to zero to recover a non-expanding universe. Note that non-zero is not standard expansion but PRS algorithm.
+
+const double alpha = 3; // Factor multiplying hubble damping term for use in PRS algorithm. alpha = #dims has been claimed to give similar dynamics without changing string width.
+const double scaling = 1; // Power law scaling of the scale factor. Using conformal time so rad dom is gamma=1 while matter dom is gamma=2.
 
 const bool makeGif = false; // Outputs data to make a gif of the isosurfaces
 const bool makeStringPosGif = true; // Outputs data to make a gif of the calculated string position and curvature data
@@ -47,14 +53,14 @@ const string zBC = "periodic"; // Allows for "neumann" (covariant derivatives se
 const bool stringPos = false;
 const bool stationary_ic = true; // true if the initial conditions code doesn't also define the field values at second timestep.
 const bool stringDetect = true; // true if you want the code to find which faces the strings pass through. May try to calculate string length later too.
-const bool detectBuffer = false; // true if you want to don't want the code to find strings during damping process. Usually because random ic means you will find A LOT of strings --> memory issues.
+const bool detectBuffer = true; // true if you want to don't want the code to find strings during damping process. Usually because random ic means you will find A LOT of strings --> memory issues.
 const bool splitLength = false;
 const bool finalOut = false;
 
 
 int main(){
 
-	Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0);
+	Array phi(2,2,nx,ny,nz,0.0), theta(3,2,nx,ny,nz,0.0), phitt(2,nx,ny,nz,0.0), thetatt(3,nx,ny,nz,0.0), energydensity(2,nx,ny,nz,0.0), powerdensity(nx,ny,nz,0.0), gaussDeviation(nx,ny,nz,0.0), phixxOut(2,nx,ny,nz,0.0), phiyyOut(2,nx,ny,nz,0.0), phizzOut(2,nx,ny,nz,0.0);
 	int comp, i, j, k, TimeStep, gifFrame, gifStringPosFrame, tNow, tPast, s, counter, x0, y0, z0, xEdge1, xEdge2, yEdge1, yEdge2, zEdge1, zEdge2, im, jm, km, ip, jp, kp;
     double phixx, phiyy, phizz, phiMagSqr, phix[2], phiy[2], phiz[2], curx, cury, curz, Fxy_y, Fxz_z, Fyx_x, Fyz_z, Fzx_x, Fzy_y, phit[2], energy, phitx, phity, thetat[3], divTheta[2], divThetat,
            thetaDotCont, Fxy, Fxz, Fyz, FCont, deviationParameter, thetaxx, thetayy, thetazz, thetatx, thetaty, damp, stringLength[2];
@@ -75,6 +81,7 @@ int main(){
     string finalFieldPath = dir_path + "/Data/finalField.txt";
     string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + input + ".txt";
     string neighboursOutPath = dir_path + "/Data/neighboursOut.txt";
+    string testmpPath = dir_path + "/Data/testmp.txt";
     string test1Path = dir_path + "/test1.txt";
     string test2Path = dir_path + "/test2.txt";
     string powerdensityOutPath = dir_path + "/Data/powerdensityOut.txt";
@@ -83,6 +90,7 @@ int main(){
     ofstream finalField (finalFieldPath.c_str());
     ofstream valsPerLoop (valsPerLoopPath.c_str());
     ofstream neighboursOut (neighboursOutPath.c_str());
+    ofstream testmp (testmpPath.c_str());
     ofstream test1 (test1Path.c_str());
     ofstream test2 (test2Path.c_str());
     ofstream powerdensityOut (powerdensityOutPath.c_str());
@@ -132,6 +140,8 @@ int main(){
     counter = 0;
 
     for(TimeStep=0;TimeStep<nt;TimeStep++){
+
+        double time = 1 + TimeStep*dt; // Conformal time, starting at eta = 1.
 
         //if((1000*TimeStep)%(nt-1)==0){
         if(TimeStep>counter){
@@ -261,7 +271,7 @@ int main(){
         deviationParameter = 0;
 
         #pragma omp parallel for reduction(+:energy,deviationParameter) default(none) shared(phi,theta,phitt,thetatt,energydensity,powerdensity,gaussDeviation,tNow,tPast,c,TimeStep,damp,xEdge1, \
-        xEdge2,yEdge1,yEdge2,zEdge1,zEdge2) \
+        xEdge2,yEdge1,yEdge2,zEdge1,zEdge2, time, phixxOut, phiyyOut, phizzOut) \
         private(phiMagSqr,phixx,phiyy,phizz,j,k,comp,phix,phiy,phiz,phit,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y,divTheta,divThetat,thetat,thetaDotCont,Fxy,Fxz,Fyz,FCont,im,jm,km,ip,jp,kp)
 
         for(i=xEdge1;i<xEdge2;i++){
@@ -300,12 +310,18 @@ int main(){
                         phizz = ( cos(theta(2,tNow,i,j,k))*phi(comp,tNow,i,j,kp) + c[comp]*sin(theta(2,tNow,i,j,k))*phi(comp+c[comp],tNow,i,j,kp) - 2*phi(comp,tNow,i,j,k) 
                                 + cos(theta(2,tNow,i,j,km))*phi(comp,tNow,i,j,km) - c[comp]*sin(theta(2,tNow,i,j,km))*phi(comp+c[comp],tNow,i,j,km) )/(dz*dz);
 
+                        phixxOut(comp,i,j,k) = phixx;
+                        phiyyOut(comp,i,j,k) = phiyy;
+                        phizzOut(comp,i,j,k) = phizz;
+
 
                         phit[comp] = ( phi(comp,tNow,i,j,k) - phi(comp,tPast,i,j,k) )/dt;
 
                         // Calculate second order time derivatives
 
-                        phitt(comp,i,j,k) = phixx + phiyy + phizz - 0.5*lambda*(phiMagSqr - pow(eta,2))*phi(comp,tNow,i,j,k) - damp*phit[comp];
+                        phitt(comp,i,j,k) = phixx + phiyy + phizz - 0.5*lambda*(phiMagSqr - pow(eta,2))*phi(comp,tNow,i,j,k) - (damp + alpha*scaling/time)*phit[comp];
+
+
 
 
                         // Calculate first order derivatives for energy
@@ -413,6 +429,16 @@ int main(){
                     powerdensity(i,j,k) = (energydensity(tNow,i,j,k) - energydensity(tPast,i,j,k))/dt;
 
                     energy += dx*dy*dz*energydensity(tNow,i,j,k);
+
+                }
+            }
+        }
+
+        for(i=0;i<nx;i++){
+            for(j=0;j<ny;j++){
+                for(k=0;k<nz;k++){
+
+                    testmp << phixxOut(0,i,j,k) << " " << phixxOut(1,i,j,k) << " " << phiyyOut(0,i,j,k) << " " << phiyyOut(1,i,j,k) << " " << phizzOut(0,i,j,k) << " " << phizzOut(1,i,j,k) << " " << phitt(0,i,j,k) << " " << phitt(1,i,j,k) << endl;
 
                 }
             }
@@ -704,7 +730,7 @@ int main(){
             {
 
                 vector<double> xString_private, yString_private, zString_private; // Declares private vectors that will be collected into the shared vectors in a critical section
-                double x, y, z, a, b, c, coeff1[2], coeff2[2], coeff3[2], coeff4[2], sol1, sol2;
+                double x, y, z, a, b, c, coeff1[2], coeff2[2], coeff3[2], coeff4[2], sol1, sol2, discrim;
 
                 #pragma omp for
                 for(i=xEdge1;i<xEdge2;i++){
@@ -746,6 +772,8 @@ int main(){
                             b = coeff1[1]*coeff4[0] + coeff2[1]*coeff3[0] - coeff1[0]*coeff4[1] - coeff2[0]*coeff3[1];
                             c = coeff2[1]*coeff4[0] - coeff2[0]*coeff4[1];
 
+                            discrim = b*b - 4*a*c;
+
                             // Check if a=0, if so the equation is simpler than quadratic --> sol2 (y in this case) is just -c/b unless b is zero as well
                             if(a==0){
 
@@ -777,11 +805,11 @@ int main(){
 
                                 // Otherwise no solutions
 
-                            } else if(b*b - 4*a*c >= 0){
+                            } else if(discrim >= 0){
 
                                 // There will be two solutions (or a repeated, this may cause trouble). First solution is
 
-                                sol2 = ( -b + sqrt(b*b - 4*a*c) )/(2*a);
+                                sol2 = ( -b + sqrt(discrim) )/(2*a);
 
                                 if(sol2>=y && sol2<=y+dy){
 
@@ -799,7 +827,7 @@ int main(){
 
                                 // Second solution is
 
-                                sol2 = ( -b - sqrt(b*b - 4*a*c) )/(2*a);
+                                sol2 = ( -b - sqrt(discrim) )/(2*a);
 
                                 if(sol2>=y && sol2<=y+dy){
 
@@ -836,6 +864,8 @@ int main(){
                             b = coeff1[1]*coeff4[0] + coeff2[1]*coeff3[0] - coeff1[0]*coeff4[1] - coeff2[0]*coeff3[1];
                             c = coeff2[1]*coeff4[0] - coeff2[0]*coeff4[1];
 
+                            discrim = b*b - 4*a*c;
+
                             if(a==0){
 
                                 if(b!=0){
@@ -858,9 +888,9 @@ int main(){
 
                                 }
 
-                            } else if(b*b - 4*a*c >= 0){
+                            } else if(discrim >= 0){
 
-                                sol2 = ( -b + sqrt(b*b - 4*a*c) )/(2*a);
+                                sol2 = ( -b + sqrt(discrim) )/(2*a);
 
                                 if(sol2>=z && sol2<=z+dz){
 
@@ -876,7 +906,7 @@ int main(){
 
                                 }
 
-                                sol2 = ( -b - sqrt(b*b - 4*a*c) )/(2*a);
+                                sol2 = ( -b - sqrt(discrim) )/(2*a);
 
                                 if(sol2>=z && sol2<=z+dz){
 
@@ -911,6 +941,8 @@ int main(){
                             b = coeff1[1]*coeff4[0] + coeff2[1]*coeff3[0] - coeff1[0]*coeff4[1] - coeff2[0]*coeff3[1];
                             c = coeff2[1]*coeff4[0] - coeff2[0]*coeff4[1];
 
+                            discrim = b*b - 4*a*c;
+
                             if(a==0){
 
                                 if(b!=0){
@@ -933,9 +965,9 @@ int main(){
 
                                 }
 
-                            } else if(b*b - 4*a*c >= 0){
+                            } else if(discrim >= 0){
 
-                                sol2 = ( -b + sqrt(b*b - 4*a*c) )/(2*a);
+                                sol2 = ( -b + sqrt(discrim) )/(2*a);
 
                                 if(sol2>=z && sol2<=z+dz){
 
@@ -951,7 +983,7 @@ int main(){
 
                                 }
 
-                                sol2 = ( -b - sqrt(b*b - 4*a*c) )/(2*a);
+                                sol2 = ( -b - sqrt(discrim) )/(2*a);
 
                                 if(sol2>=z && sol2<=z+dz){
 
@@ -985,13 +1017,32 @@ int main(){
 
             }
 
+            if(makeStringPosGif and TimeStep%saveFreq == 0){
+
+                ss.str(string());
+                ss << gifStringPosFrame;
+                string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + ss.str() + ".txt";
+                ofstream gifStringPosData (gifStringPosDataPath.c_str());
+                gifStringPosFrame+=1;
+
+                for(i=0;i<xString.size();i++){
+
+                    gifStringPosData << xString[i] << " " << yString[i] << " " << zString[i] << endl;
+
+                }
+            }
+
+            ////////////////////   Old code to determine neighbours by brute force search ///////////////////////////////
+
+            // This was very slow for large numbers of string crosses. Now just output string positions and use kd-tree in python
+
             // Determine neighbouring points of each intersection points.
             // Need to account for periodic boundary conditions
             // Follow the string along, connecting each point to it's nearest neighbour that hasn't already been allocated
 
             // if(xString.size()!=0){ // Only do all this if points have actually been found
 
-                cout << xString.size() << endl;
+            //     //cout << xString.size() << endl;
 
             //     vector<vector<int>> neighbours(2, vector<int>( xString.size(),-1 ));
             //     vector<vector<bool>> neighboursFound(2, vector<bool>( xString.size(), false ));

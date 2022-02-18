@@ -19,7 +19,7 @@ typedef complex<double> dcmplx;
 //                                 		  Parameters & Declarations
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const string ic_type = "loop collision";	 // Which type of initial condition generation to use. "NG sine" bases initial conditions on the Nambu-Goto sine wave solution constructed with straight string solutions 
+const string ic_type = "random";	 // Which type of initial condition generation to use. "NG sine" bases initial conditions on the Nambu-Goto sine wave solution constructed with straight string solutions 
                                  	 // "simple sine" offsets the straight string solutions (x position) by a sine wave
 			         	 // "random" creates random initial conditions. "boost" creates a single straight (z directed) string with a Lorentz boost applied.
                                  	 // "loop collision" creates two sets of (seperated) string, anti-string pairs. They are boosted towards each other and patched together so that they will collide
@@ -55,7 +55,9 @@ const double gr = 0.5*(1+sqrt(5));
 
 // Needed for random initial conditions ///////////////////////////////////////////////
 
-const double seed = 1;
+const double seed = 42;
+const double mean = 0; // Probably always want this to be zero
+const double stdev = 0.5;
 
 // Needed for the case of one z directed boosted string
 
@@ -67,21 +69,21 @@ const double v1z = 0;
 
 // Needed for loop collision. Assumes string anti-string pair 1 are x directed strings and pair 2 are z directed strings.
 
-const double pos1s[2] = {0.05*(ny-1)*dy, -0.25*(nz-1)*dz}; // Old {2, -0.25*(nz-1)*dz}; // y and z coordinates
-const double pos1a[2] = {-0.05*(ny-1)*dy, 0.25*(nz-1)*dz}; // Old {-2, 0.25*(nz-1)*dz};
+const double pos1s[2] = {0.15*(ny-1)*dy, -0.25*(nz-1)*dz}; // Old {2, -0.25*(nz-1)*dz}; // y and z coordinates
+const double pos1a[2] = {-0.15*(ny-1)*dy, 0.25*(nz-1)*dz}; // Old {-2, 0.25*(nz-1)*dz};
 
 const double pos2s[2] = {0.25*(nx-1)*dx, 0}; // Old {0.25*(nx-1)*dx, -1}; // x and y coordinates
 const double pos2a[2] = {-0.25*(nx-1)*dx, 0}; // Old {-0.25*(nx-1)*dx, 1}; 
 
 
-const double v1s[3] = {0, -0.33*sqrt(1-pow(0.4,2)), 0.33*0.4}; 
-const double v1a[3] = {0, 0.33*sqrt(1-pow(0.4,2)), -0.33*0.4}; // Old {0, 0.6*sqrt(1-pow(0.4,2)), 0.6*0.4};
+const double v1s[3] = {0, -0.75, 0}; 
+const double v1a[3] = {0, 0.75, 0}; // Old {0, 0.6*sqrt(1-pow(0.4,2)), 0.6*0.4};
 
 const double v2s[3] = {0, 0, 0}; // Old {0.6*0.4, 0.6*sqrt(1-pow(0.4,2)), 0};
 const double v2a[3] = {0, 0, 0}; // Old {-0.6*0.4, -0.6*sqrt(1-pow(0.4,2)), 0};
 
-const double omega = 0.5; // Phase modification parameter. Phase goes to zero more quickly for larger values
-const double Lmod = 25; // Phase modification parameter. Length scale associated with modification
+const double omega = 0.5; // Phase modification parameter. Phase goes to zero more quickly for larger values. Old method
+const double Lmod = 25; // Phase modification parameter. Length scale associated with modification. Old method
 
 
 int main(){
@@ -667,27 +669,35 @@ int main(){
 
     } else if(ic_type == "random"){
 
-        uniform_real_distribution<double> unif_rand(-1,1);
-        minstd_rand eng;
+        default_random_engine generator (seed);
+        normal_distribution<double> distribution (mean,stdev);
 
-        eng.seed(seed); // Creates (psuedo) random number generator unif_rand with the seed specified at the beginning. Each number generated is between -1 and 1
+        // uniform_real_distribution<double> unif_rand(-1,1);
+        // minstd_rand eng;
+
+        //eng.seed(seed); // Creates (psuedo) random number generator unif_rand with the seed specified at the beginning. Each number generated is between -1 and 1
 
         for(i=0;i<nx;i++){
             for(j=0;j<ny;j++){
                 for(k=0;k<nz;k++){
 
-                    phi(0,i,j,k) = unif_rand(eng);
-                    phi(1,i,j,k) = unif_rand(eng);
+                    phi(0,i,j,k) = distribution(generator);
+                    phi(1,i,j,k) = distribution(generator);
 
-                    if(g != 0){
+                    // phi(0,i,j,k) = unif_rand(eng);
+                    // phi(1,i,j,k) = unif_rand(eng);
 
-                        // Gauge fields scaled by 1/g to try to account for "natural magnitude" of field. May need to adjust the way this is done
+                    // Just leave the gauge fields set at zero
 
-                        A(0,i,j,k) = unif_rand(eng)/g;
-                        A(1,i,j,k) = unif_rand(eng)/g;
-                        A(2,i,j,k) = unif_rand(eng)/g;
+                    // if(g != 0){
 
-                    }
+                    //     // Gauge fields scaled by 1/g to try to account for "natural magnitude" of field. May need to adjust the way this is done
+
+                    //     A(0,i,j,k) = unif_rand(eng)/g;
+                    //     A(1,i,j,k) = unif_rand(eng)/g;
+                    //     A(2,i,j,k) = unif_rand(eng)/g;
+
+                    // }
 
                     // Otherwise leave the A array as initialised - zeros everywhere
 
@@ -1037,6 +1047,10 @@ int main(){
         if(v2aMagSqr==0){ sf_pos2a[0] = pos2a[0];  sf_pos2a[1] = pos2a[1]; }
         else{ sf_pos2a[0] = pos2a[0] + (gamma2a-1)*(v2a[0]*pos2a[0] + v2a[1]*pos2a[1])*v2a[0]/v2aMagSqr;  sf_pos2a[1] = pos2a[1] + (gamma2a-1)*(v2a[0]*pos2a[0] + v2a[1]*pos2a[1])*v2a[1]/v2aMagSqr; }
 
+        #pragma omp parallel for default(none) private(j,k,xb,yb,zb,ys1s,zs1s,ys1a,zs1a,xs2s,ys2s,xs2a,ys2a,distance,pClosest,phiMag,AMag,cUnitPos1s,cUnitPos1a,cUnitPos2s,cUnitPos2a, A1s,phi1s, \
+        A1a,phi1a,A2s,phi2s,A2a,phi2a,phase_fac,norm_fac,str,comp,A1sPatch,A1aPatch,A2sPatch,A2aPatch) shared(v1sMagSqr,v1aMagSqr,v2sMagSqr,v2aMagSqr,gamma1s,gamma1a,gamma2s,gamma2a,phi1_0,A1, \
+        phi2_0,A2,At1s,At1a,At2s,At2a,x0,y0,z0,v1s,v1a,v2s,v2a,sf_pos1s,sf_pos1a,sf_pos2s,sf_pos2a,SOR_Fields,ci)
+
         for(i=0;i<nx;i++){
 
             xb = (i-x0)*dx;
@@ -1102,7 +1116,7 @@ int main(){
                             if(g==0){ AMag[str] = 0; }
                             else{ AMag[str] = n/g; }
 
-                            cout << "Off straight string solution grid" << endl;
+                            // cout << "Off straight string solution grid" << endl;
 
                         }
 
@@ -1489,7 +1503,7 @@ int main(){
                             if(g==0){ AMag[str] = 0; }
                             else{ AMag[str] = n/g; }
 
-                            cout << "Off straight string solution grid" << endl;
+                            // cout << "Off straight string solution grid" << endl;
 
                         }
 
