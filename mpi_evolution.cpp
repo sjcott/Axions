@@ -78,8 +78,6 @@ int main(int argc, char ** argv){
 	else{ coreSize = chunk+1; }
 	int totSize = coreSize + 2*haloSize;
 
-	cout << "Rank: " << rank << ", coreSize: " << coreSize << endl; 
-
 	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0), phitt(2*coreSize, 0.0), thetatt(3*coreSize, 0.0), energydensity(coreSize, 0.0), gaussDeviation(coreSize, 0.0);
 	double phixx,phiyy,phizz,energy,deviationParameter,damp,phit[2],phiMagSqr,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y;
 	int x0,y0,z0,i,j,k,TimeStep,gifStringPosFrame,tNow,tPast,counter,comp,imx,ipx,imy,ipy,imz,ipz,ipxmy,ipxmz,imxpy,ipymz,imxpz,imypz;
@@ -304,6 +302,8 @@ int main(int argc, char ** argv){
         energy = 0;
         deviationParameter = 0;
 
+        vector<double> xString, yString, zString; // Declares the vectors and clears them at every loop
+
         for(i=haloSize;i<coreSize+haloSize;i++){ // Now evolve the core data
 
         	// No need to worry about periodicity with the x neighbours because halo is designed to contain them
@@ -329,6 +329,7 @@ int main(int argc, char ** argv){
         	ipymz = (ipy+dataStart-1+nz)%nz + ( (ipy+dataStart)/nz )*nz - dataStart;
         	imxpz = ipz-ny*nz;
         	imypz = (imy+dataStart+1)%nz + ( (imy+dataStart)/nz )*nz - dataStart;
+
 
 	        phiMagSqr = pow(phi[totSize*tNow+i],2) + pow(phi[totSize*(nts+tNow)+i],2);
 
@@ -410,7 +411,332 @@ int main(int argc, char ** argv){
             thetatt[coreSize+i-haloSize] = -2*g*g*cury - Fyx_x - Fyz_z - damp*( theta[totSize*(nts+tNow)+i] - theta[totSize*(nts+tPast)+i] )/dt;
             thetatt[coreSize*2+i-haloSize] = -2*g*g*curz - Fzx_x - Fzy_y - damp*( theta[totSize*(nts*2+tNow)+i] - theta[totSize*(nts*2+tPast)+i] )/dt;
 
+        	// Calculate where the strings cross through grid faces. Each point searches the faces on the positive side (i.e pxpy, pxpz and pypz) to avoid double counting
+
+	        if(stringDetect and (!detectBuffer or TimeStep>=damped_nt)){
+
+	        	double x,y,z,coeff1[2],coeff2[2],coeff3[2],coeff4[2],a,b,c,discrim,sol1,sol2;
+	        	int ipxpy,ipxpz,ipypz;
+
+	        	// Need a few more indices and the physical coordinates in space
+
+	        	ipxpy = ipy+ny*nz;
+	        	ipxpz = ipz+ny*nz;
+	        	ipypz = (ipy+dataStart+1)%nz + ( (ipy+dataStart)/nz )*nz - dataStart;
+
+	        	x = ( (i+dataStart)/(ny*nz) - x0 )*dx;
+	        	y = ( ((i+dataStart)/nz)%ny - y0 )*dy;
+	        	z = ( (i+dataStart)%nz - z0 )*dz;
+
+
+		        for(comp=0;comp<2;comp++){
+
+		            // Do the same process for the real and imaginary components
+
+		            coeff1[comp] = phi[totSize*(nts*comp+tNow)+ipxpy] - phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipy] + phi[totSize*(nts*comp+tNow)+i];
+		            coeff2[comp] = (y+dy)*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+i]) + y*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+ipxpy]);
+		            coeff3[comp] = (x+dx)*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+i]) + x*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipxpy]);
+		            coeff4[comp] = (x+dx)*( (y+dy)*phi[totSize*(nts*comp+tNow)+i] - y*phi[totSize*(nts*comp+tNow)+ipy] ) - x*( (y+dy)*phi[totSize*(nts*comp+tNow)+ipx] - y*phi[totSize*(nts*comp+tNow)+ipxpy] );
+
+		        }
+
+		        // Substituting one equation into the other gives a quadratic equation for one of the coordinates. Now calculate the coefficients of the quadratic.
+
+		        a = coeff1[1]*coeff3[0] - coeff1[0]*coeff3[1];  
+		        b = coeff1[1]*coeff4[0] + coeff2[1]*coeff3[0] - coeff1[0]*coeff4[1] - coeff2[0]*coeff3[1];
+		        c = coeff2[1]*coeff4[0] - coeff2[0]*coeff4[1];
+
+		        discrim = b*b - 4*a*c;
+
+		        // Check if a=0, if so the equation is simpler than quadratic --> sol2 (y in this case) is just -c/b unless b is zero as well
+		        if(a==0){
+		            if(b!=0){
+
+		                // There is just one solution
+
+		                sol2 = -c/b; // y location of string
+
+		                // Does this lie inside the face?
+		                if(sol2>=y && sol2<=y+dy){
+
+		                    sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]); // x location of string
+
+		                    // Does this lie inside the face?
+		                    if(sol1>=x && sol1<=x+dx){
+
+		                        // The string intersects the face so add it to the vectors
+
+		                        xString.push_back(sol1);
+		                        yString.push_back(sol2);
+		                        zString.push_back(z);
+
+		                    }
+
+		                }
+
+		            }
+
+		            // Otherwise no solutions
+
+		        } else if(discrim >= 0){
+
+		            // There will be two solutions (or a repeated, this may cause trouble). First solution is
+
+		            sol2 = ( -b + sqrt(discrim) )/(2*a);
+
+		            if(sol2>=y && sol2<=y+dy){
+
+		                sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+		                if(sol1>=x && sol1<=x+dx){
+
+		                    xString.push_back(sol1);
+		                    yString.push_back(sol2);
+		                    zString.push_back(z);
+
+		                }
+
+		            }
+
+		            // Second solution is
+
+		            sol2 = ( -b - sqrt(discrim) )/(2*a);
+
+		            if(sol2>=y && sol2<=y+dy){
+
+		                sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+		                if(sol1>=x && sol1<=x+dx){
+
+		                    xString.push_back(sol1);
+		                    yString.push_back(sol2);
+		                    zString.push_back(z);
+
+		                }
+
+		            }
+
+		        }
+
+		        // Now repeat this process for the y directed face
+
+	            for(comp=0;comp<2;comp++){
+
+	                coeff1[comp] = phi[totSize*(nts*comp+tNow)+ipxpz] - phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipz] + phi[totSize*(nts*comp+tNow)+i];
+	                coeff2[comp] = (z+dz)*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+i]) + z*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+ipxpz]);
+	                coeff3[comp] = (x+dx)*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+i]) + x*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipxpz]);
+	                coeff4[comp] = (x+dx)*( (z+dz)*phi[totSize*(nts*comp+tNow)+i] - z*phi[totSize*(nts*comp+tNow)+ipz] ) - x*( (z+dz)*phi[totSize*(nts*comp+tNow)+ipx] - z*phi[totSize*(nts*comp+tNow)+ipxpz] );
+
+	            }
+
+	            a = coeff1[1]*coeff3[0] - coeff1[0]*coeff3[1];
+	            b = coeff1[1]*coeff4[0] + coeff2[1]*coeff3[0] - coeff1[0]*coeff4[1] - coeff2[0]*coeff3[1];
+	            c = coeff2[1]*coeff4[0] - coeff2[0]*coeff4[1];
+
+	            discrim = b*b - 4*a*c;
+
+	            if(a==0){
+	                if(b!=0){
+
+	                    sol2 = -c/b;
+
+	                    if(sol2>=z && sol2<=z+dz){
+
+	                        sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+	                        if(sol1>=x && sol1<=x+dx){
+
+	                            xString.push_back(sol1);
+	                            yString.push_back(y);
+	                            zString.push_back(sol2);
+
+	                        }
+
+	                    }
+
+	                }
+	            } else if(discrim >= 0){
+
+	                sol2 = ( -b + sqrt(discrim) )/(2*a);
+
+	                if(sol2>=z && sol2<=z+dz){
+
+	                    sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+	                    if(sol1>=x && sol1<=x+dx){
+
+	                        xString.push_back(sol1);
+	                        yString.push_back(y);
+	                        zString.push_back(sol2);
+
+	                    }
+
+	                }
+
+	                sol2 = ( -b - sqrt(discrim) )/(2*a);
+
+	                if(sol2>=z && sol2<=z+dz){
+
+	                    sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+	                    if(sol1>=x && sol1<=x+dx){
+
+	                        xString.push_back(sol1);
+	                        yString.push_back(y);
+	                        zString.push_back(sol2);
+
+	                    }
+
+	                }
+
+	            }
+
+
+
+	            // Now repeat one more time for the x directed face
+
+	            for(comp=0;comp<2;comp++){
+
+	                coeff1[comp] = phi[totSize*(nts*comp+tNow)+ipypz] - phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+ipz] + phi[totSize*(nts*comp+tNow)+i];
+	                coeff2[comp] = (z+dz)*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+i]) + z*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+ipypz]);
+	                coeff3[comp] = (y+dy)*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+i]) + y*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+ipypz]);
+	                coeff4[comp] = (y+dy)*( (z+dz)*phi[totSize*(nts*comp+tNow)+i] - z*phi[totSize*(nts*comp+tNow)+ipz] ) - y*( (z+dz)*phi[totSize*(nts*comp+tNow)+ipy] - z*phi[totSize*(nts*comp+tNow)+ipypz] );
+
+	            }
+
+	            a = coeff1[1]*coeff3[0] - coeff1[0]*coeff3[1];
+	            b = coeff1[1]*coeff4[0] + coeff2[1]*coeff3[0] - coeff1[0]*coeff4[1] - coeff2[0]*coeff3[1];
+	            c = coeff2[1]*coeff4[0] - coeff2[0]*coeff4[1];
+
+	            discrim = b*b - 4*a*c;
+
+	            if(a==0){
+	                if(b!=0){
+
+	                    sol2 = -c/b;
+
+	                    if(sol2>=z && sol2<=z+dz){
+
+	                        sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+	                        if(sol1>=y && sol1<=y+dy){
+
+	                            xString.push_back(x);
+	                            yString.push_back(sol1);
+	                            zString.push_back(sol2);
+
+	                        }
+
+	                    }
+
+	                }
+	            } else if(discrim >= 0){
+
+	                sol2 = ( -b + sqrt(discrim) )/(2*a);
+
+	                if(sol2>=z && sol2<=z+dz){
+
+	                    sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+	                    if(sol1>=y && sol1<=y+dy){
+
+	                        xString.push_back(x);
+	                        yString.push_back(sol1);
+	                        zString.push_back(sol2);
+
+	                    }
+
+	                }
+
+	                sol2 = ( -b - sqrt(discrim) )/(2*a);
+
+	                if(sol2>=z && sol2<=z+dz){
+
+	                    sol1 = -(coeff3[0]*sol2 + coeff4[0])/(coeff1[0]*sol2 + coeff2[0]);
+
+	                    if(sol1>=y && sol1<=y+dy){
+
+	                        xString.push_back(x);
+	                        yString.push_back(sol1);
+	                        zString.push_back(sol2);
+
+	                    }
+
+	                }
+
+	            }
+
+		    }
+
         }
+
+        // Next step is to collect all the intersections together on the master process and output them to text
+
+        if(stringDetect and (!detectBuffer or TimeStep>=damped_nt)){
+
+	        if(rank==0){
+
+	        	vector<double> xStringFull, yStringFull, zStringFull;
+
+	        	xStringFull.insert(xStringFull.end(),xString.begin(),xString.end());
+	        	yStringFull.insert(yStringFull.end(),yString.begin(),yString.end());
+	        	zStringFull.insert(zStringFull.end(),zString.begin(),zString.end());
+
+	        	for(i=1;i<size;i++){
+
+	        		// Find out how many intersections each process found
+
+	        		int nIntersections;
+
+	        		MPI_Recv(&nIntersections,1,MPI_INT,i,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+	        		// Declare vectors to receive each process's intersections and receive the data.
+
+	        		vector<double> localxString(nIntersections,0.0), localyString(nIntersections,0.0), localzString(nIntersections,0.0);
+
+	        		MPI_Recv(&localxString[0],nIntersections,MPI_DOUBLE,i,2,MPI_COMM_WORLD);
+	        		MPI_Recv(&localyString[0],nIntersections,MPI_DOUBLE,i,3,MPI_COMM_WORLD);
+	        		MPI_Recv(&localzString[0],nIntersections,MPI_DOUBLE,i,4,MPI_COMM_WORLD);
+
+	        		// Append the data to the full collection of intersections
+
+	        		xStringFull.insert(xStringFull.end(),localxString.begin(),localxString.end());
+	        		yStringFull.insert(yStringFull.end(),localyString.begin(),localyString.end());
+	        		zStringFull.insert(zStringFull.end(),localzString.begin(),localzString.end());
+
+	        	}
+
+	        	// Full set of intersections are now collected on the master process. Now just output them to text.
+
+	        	if(makeStringPosGif and TimeStep%saveFreq == 0){
+
+	                ss.str(string());
+	                ss << gifStringPosFrame;
+	                string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + ss.str() + ".txt";
+	                ofstream gifStringPosData (gifStringPosDataPath.c_str());
+	                gifStringPosFrame+=1;
+
+	                for(i=0;i<xStringFull.size();i++){
+
+	                    gifStringPosData << xStringFull[i] << " " << yStringFull[i] << " " << zStringFull[i] << endl;
+
+	                }
+	            }
+
+	        } else{
+
+	        	// Tell the master process how many string intersections to expect
+	        	int nIntersections = xString.size();
+	        	MPI_Send(&nIntersections,1,MPI_INT,0,1,MPI_COMM_WORLD);
+
+	        	// Send the data
+	        	MPI_Send(&xString[0],nIntersections,MPI_DOUBLE,0,2,MPI_COMM_WORLD);
+	        	MPI_Send(&yString[0],nIntersections,MPI_DOUBLE,0,3,MPI_COMM_WORLD);
+	        	MPI_Send(&zString[0],nIntersections,MPI_DOUBLE,0,4,MPI_COMM_WORLD);
+
+	        }
+
+	    }
 
         // Update the core
 
