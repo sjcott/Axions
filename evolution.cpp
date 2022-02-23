@@ -20,10 +20,10 @@ using namespace std;
 
 // Some parts of code may assume nx,ny and nz are odd numbers
 
-const int nx = 11;
-const int ny = 11;
-const int nz = 11;
-const int nt = 10001;
+const int nx = 101;
+const int ny = 101;
+const int nz = 101;
+const int nt = 1001;
 const double dx = 0.5;
 const double dy = 0.5;
 const double dz = 0.5;
@@ -31,7 +31,7 @@ const double dt = 0.05;
 
 const double lambda = 1;
 const double eta = 1;
-const double g = 0.5;
+const double g = 0;
 
 const int damped_nt = 200; // Number of time steps for which damping is imposed. Useful for random initial conditions
 const double dampFac = 0.5; // magnitude of damping term, unclear how strong to make this

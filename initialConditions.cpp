@@ -25,16 +25,16 @@ const string ic_type = "random";	 // Which type of initial condition generation 
                                  	 // "loop collision" creates two sets of (seperated) string, anti-string pairs. They are boosted towards each other and patched together so that they will collide
                                  	 // and form a loop (2 one due to periodic boundary conditions which are required for this sim) 
 
-const int nx = 201;
-const int ny = 201;
-const int nz = 201;
+const int nx = 401;
+const int ny = 401;
+const int nz = 401;
 const double dx = 0.5;
 const double dy = 0.5;
 const double dz = 0.5;
 const double dt = 0.05;
 
 const int n = 1; // This is useless for now, code assumes it is 1.
-const double g = 0.5;
+const double g = 0;
 
 const double pi = 4*atan(1);
 

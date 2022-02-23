@@ -3,20 +3,20 @@
 #include <fstream>
 #include <iomanip>
 #include <sys/time.h>
-#include <complex>
 #include <vector>
 #include <mpi.h>
+#include <random>
 
 using namespace std;
 
 // Never adjusted but useful to define for functions
 const int nts = 2; // Number of time steps saved in data arrays
 
-const int nx = 11;
-const int ny = 11;
-const int nz = 11;
+const int nx = 401;
+const int ny = 401;
+const int nz = 401;
 const int nPos = nx*ny*nz;
-const int nt = 10001;
+const int nt = 8001;
 const double dx = 0.5;
 const double dy = 0.5;
 const double dz = 0.5;
@@ -24,7 +24,7 @@ const double dt = 0.05;
 
 const double lambda = 1;
 const double eta = 1;
-const double g = 0.5;
+const double g = 0;
 
 const int damped_nt = 200; // Number of time steps for which damping is imposed. Useful for random initial conditions
 const double dampFac = 0.5; // magnitude of damping term, unclear how strong to make this
@@ -35,10 +35,17 @@ const double dampFac = 0.5; // magnitude of damping term, unclear how strong to 
 const double alpha = 3; // Factor multiplying hubble damping term for use in PRS algorithm. alpha = #dims has been claimed to give similar dynamics without changing string width.
 const double scaling = 1; // Power law scaling of the scale factor. Using conformal time so rad dom is gamma=1 while matter dom is gamma=2.
 
-const bool makeGif = false; // Outputs data to make a gif of the isosurfaces
-const bool makeStringPosGif = false; // Outputs data to make a gif of the calculated string position and curvature data
+const bool makeGif = false; // Outputs data to make a gif of the isosurfaces. Not implemented in this version yet.
+const bool makeStringPosGif = true; // Outputs data to make a gif of the calculated string position and curvature data
 const int saveFreq = 5;
 const int countRate = 10;
+const string gifTag = "global_PRS_dx0p5_";
+
+// How are the initial conditions generated? Below are all parameters used for generating (or loading) the initial conditions
+const string ic_type = "random"; // Current options are data, stationary data and random
+const double seed = 42;
+const double mean = 0; // Probably always want this to be zero
+const double stdev = 0.5;
 
 // Below has been removed and code now assumes periodic boundaries. Shouldn't be too tricky to add it back in if neccessary
 
@@ -46,7 +53,6 @@ const int countRate = 10;
 //const string zBC = "periodic"; // Allows for "neumann" (covariant derivatives set to zero), "periodic" or fixed (any other string will choose this option) boundary conditions.
 
 const bool stringPos = false;
-const bool stationary_ic = true; // true if the initial conditions code doesn't also define the field values at second timestep.
 const bool stringDetect = true; // true if you want the code to find which faces the strings pass through. May try to calculate string length later too.
 const bool detectBuffer = true; // true if you want to don't want the code to find strings during damping process. Usually because random ic means you will find A LOT of strings --> memory issues.
 const bool splitLength = false;
@@ -66,11 +72,8 @@ int main(int argc, char ** argv){
     MPI_Comm_rank( MPI_COMM_WORLD, &rank );
     MPI_Comm_size( MPI_COMM_WORLD, &size );
 
-    if(size==1){cout << "Warning: Only one processor being used. This code is not designed for only one processor and may not work." << endl;}
-
     int chunk = nPos/size;
     int chunkRem = nPos - size*chunk;
-
 
     int coreSize;
 	int haloSize = 2*nz*ny;
@@ -78,8 +81,17 @@ int main(int argc, char ** argv){
 	else{ coreSize = chunk+1; }
 	int totSize = coreSize + 2*haloSize;
 
+    // Warnings
+
+    if(rank==0){
+
+    	if(size==1){ cout << "Warning: Only one processor being used. This code is not designed for only one processor and may not work." << endl; }
+    	if(chunk<haloSize){ cout << "Warning: Chunk size is less than the halo size (i.e chunk neighbour data). Code currently assumes this is not the case so it probably won't work." << endl; }
+
+    }
+
 	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0), phitt(2*coreSize, 0.0), thetatt(3*coreSize, 0.0), energydensity(coreSize, 0.0), gaussDeviation(coreSize, 0.0);
-	double phixx,phiyy,phizz,energy,deviationParameter,damp,phit[2],phiMagSqr,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y;
+	double phixx,phiyy,phizz,energy,deviationParameter,damp,phit[2],phiMagSqr,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y,localSeed;
 	int x0,y0,z0,i,j,k,TimeStep,gifStringPosFrame,tNow,tPast,counter,comp,imx,ipx,imy,ipy,imz,ipz,ipxmy,ipxmz,imxpy,ipymz,imxpz,imypz;
 	int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
 
@@ -92,27 +104,27 @@ int main(int argc, char ** argv){
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    string input;
-    if(rank==0){
+    // string input;
+    // if(rank==0){
 
-    	cout << "Enter a tag for output files: " << flush;
-    	cin >> input;
+    // 	cout << "Enter a tag for output files: " << flush;
+    // 	cin >> input;
 
-    }
+    // }
 
     MPI_Barrier(MPI_COMM_WORLD); // Allows all other processes to start once user input has been received.
 
     string icPath = dir_path + "/Data/ic.txt";
     string finalFieldPath = dir_path + "/Data/finalField.txt";
-    string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + input + ".txt";
-    string testPath = dir_path + "/Data/test_" + to_string(rank) + ".txt";
-    string testMergePath = dir_path + "/Data/test.txt";
+    //string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + input + ".txt";
+    // string testPath = dir_path + "/Data/test_" + to_string(rank) + ".txt";
+    // string testMergePath = dir_path + "/Data/test_" + gifTag + ".txt";
 
     ifstream ic (icPath.c_str());
     ofstream finalField (finalFieldPath.c_str());
-    ofstream valsPerLoop (valsPerLoopPath.c_str());
-    ofstream test (testPath.c_str());
-    ofstream testMerge (testMergePath.c_str());
+    //ofstream valsPerLoop (valsPerLoopPath.c_str());
+    // ofstream test (testPath.c_str());
+    // ofstream testMerge (testMergePath.c_str());
 
     x0 = int(0.5*(nx-1));
     y0 = int(0.5*(ny-1));
@@ -126,7 +138,7 @@ int main(int argc, char ** argv){
 
     double wasteData[5];
 
-    if(stationary_ic){
+    if(ic_type=="stationary data"){
 
     	for(i=0;i<nPos;i++){
 
@@ -212,7 +224,7 @@ int main(int argc, char ** argv){
 
     	}
 
-    } else{
+    } else if(ic_type=="data"){
 
     	for(TimeStep=0;TimeStep<2;TimeStep++){
     		for(i=0;i<nPos;i++){
@@ -270,12 +282,75 @@ int main(int argc, char ** argv){
     		}
     	}
 
+    } else if(ic_type=="random"){
+
+    	// Use the seed to generate the data
+		mt19937 generator (seed);
+        normal_distribution<double> distribution (mean,stdev);
+
+        // Skip the random numbers ahead to the appropriate point
+        for(i=0;i<coreStart;i++){
+        	for(comp=0;comp<2;comp++){ // Make sure to change this if randomly generating gauge fields too rather than leaving them at zero.
+
+        		double randomWaste = distribution(generator);
+
+        	}
+        }
+
+
+
+        for(i=haloSize;i<coreSize+haloSize;i++){
+
+        	phi[i] = distribution(generator);
+        	phi[totSize*nts+i] = distribution(generator);
+
+        	// Set next timestep as equal to the first
+        	phi[totSize+i] = phi[i];
+        	phi[totSize*(nts+1)+i] = phi[totSize*nts+i];
+
+        	// Leave the gauge fields as zero (set by initialisation)
+
+        }
+
+        //cout << "Rank " << rank << "has phi[haloSize] = " << phi[haloSize] << ", and the next random number would be " << distribution(generator) << endl;
+
+        // Now that the core data has been generated, need to communicate the haloes between processes. 
+
+        for(comp=0;comp<2;comp++){ 
+
+        	MPI_Sendrecv(&phi[totSize*nts*comp+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
+        				 &phi[totSize*nts*comp+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+
+        	MPI_Sendrecv(&phi[totSize*nts*comp+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+        				 &phi[totSize*nts*comp],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+        	MPI_Sendrecv(&phi[totSize*(nts*comp+1)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,1, // Send this
+        				 &phi[totSize*(nts*comp+1)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+
+        	MPI_Sendrecv(&phi[totSize*(nts*comp+1)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,
+        				 &phi[totSize*(nts*comp+1)],haloSize,MPI_DOUBLE,(rank-1+size)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+        }
+
+        // for(comp=0;comp<3;comp++){ 
+
+        // 	MPI_Sendrecv(&theta[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,
+        // 				 &theta[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+        // 	MPI_Sendrecv(&theta[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+        // 				 &theta[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+        // }   	
+
     }
 
-    // All relevant data loaded.
+    gettimeofday(&end,NULL);
+
+    if(rank==0){ cout << "Initial data loaded/generated in: " << end.tv_sec - start.tv_sec << "s" << endl; }
 
     gifStringPosFrame = 0;
     counter = 0;
+    bool stringsExist = true;
 
     for(TimeStep=0;TimeStep<nt;TimeStep++){
 
@@ -694,9 +769,9 @@ int main(int argc, char ** argv){
 
 	        		vector<double> localxString(nIntersections,0.0), localyString(nIntersections,0.0), localzString(nIntersections,0.0);
 
-	        		MPI_Recv(&localxString[0],nIntersections,MPI_DOUBLE,i,2,MPI_COMM_WORLD);
-	        		MPI_Recv(&localyString[0],nIntersections,MPI_DOUBLE,i,3,MPI_COMM_WORLD);
-	        		MPI_Recv(&localzString[0],nIntersections,MPI_DOUBLE,i,4,MPI_COMM_WORLD);
+	        		MPI_Recv(&localxString[0],nIntersections,MPI_DOUBLE,i,2,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&localyString[0],nIntersections,MPI_DOUBLE,i,3,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&localzString[0],nIntersections,MPI_DOUBLE,i,4,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
 	        		// Append the data to the full collection of intersections
 
@@ -708,11 +783,11 @@ int main(int argc, char ** argv){
 
 	        	// Full set of intersections are now collected on the master process. Now just output them to text.
 
-	        	if(makeStringPosGif and TimeStep%saveFreq == 0){
+	        	if(makeStringPosGif and TimeStep%saveFreq == 0 and stringsExist){
 
 	                ss.str(string());
 	                ss << gifStringPosFrame;
-	                string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + ss.str() + ".txt";
+	                string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + gifTag + "_nx_" + to_string(nx) + "_seed_" + to_string(round(seed)) + ss.str() + ".txt";
 	                ofstream gifStringPosData (gifStringPosDataPath.c_str());
 	                gifStringPosFrame+=1;
 
@@ -721,6 +796,8 @@ int main(int argc, char ** argv){
 	                    gifStringPosData << xStringFull[i] << " " << yStringFull[i] << " " << zStringFull[i] << endl;
 
 	                }
+
+	                if(xStringFull.size() == 0){ stringsExist = false; }
 	            }
 
 	        } else{
@@ -760,59 +837,59 @@ int main(int argc, char ** argv){
 
         for(comp=0;comp<2;comp++){ 
 
-        	MPI_Send(&phi[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD);
-        	MPI_Send(&phi[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD);
+        	MPI_Sendrecv(&phi[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
+        				 &phi[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
 
-        	MPI_Recv(&phi[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-        	MPI_Recv(&phi[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        	MPI_Sendrecv(&phi[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+        				 &phi[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
         }
 
         for(comp=0;comp<3;comp++){ 
 
-        	MPI_Send(&theta[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD);
-        	MPI_Send(&theta[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD);
+        	MPI_Sendrecv(&theta[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,
+        				 &theta[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
-        	MPI_Recv(&theta[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-        	MPI_Recv(&theta[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        	MPI_Sendrecv(&theta[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+        				 &theta[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
         }
 
         // Code for testing the output
 
-        if(TimeStep==nt-1){
+  //       if(TimeStep==nt-1){
 
-	        if(rank==0){
+	 //        if(rank==0){
 
-	        	vector<double> phittOut(2*nPos,0.0), thetattOut(3*nPos,0.0);
-	        	for(i=0;i<coreSize;i++){ phittOut[i] = phitt[i]; phittOut[nPos+i] = phitt[coreSize+i]; thetattOut[i] = thetatt[i]; thetattOut[nPos+i] = thetatt[coreSize+i]; thetattOut[2*nPos+i] = thetatt[2*coreSize+i]; }
+	 //        	vector<double> phittOut(2*nPos,0.0), thetattOut(3*nPos,0.0);
+	 //        	for(i=0;i<coreSize;i++){ phittOut[i] = phitt[i]; phittOut[nPos+i] = phitt[coreSize+i]; thetattOut[i] = thetatt[i]; thetattOut[nPos+i] = thetatt[coreSize+i]; thetattOut[2*nPos+i] = thetatt[2*coreSize+i]; }
 
-	        	for(i=1;i<size;i++){
+	 //        	for(i=1;i<size;i++){
 
-	        		int localCoreStart;
-	        		int localCoreSize;
-	        		if(i<chunkRem){ localCoreStart = i*(chunk+1); localCoreSize = chunk+1; }
-	        		else{ localCoreStart = i*chunk + chunkRem; localCoreSize = chunk; }
+	 //        		int localCoreStart;
+	 //        		int localCoreSize;
+	 //        		if(i<chunkRem){ localCoreStart = i*(chunk+1); localCoreSize = chunk+1; }
+	 //        		else{ localCoreStart = i*chunk + chunkRem; localCoreSize = chunk; }
 
-	        		MPI_Recv(&phittOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-	        		MPI_Recv(&phittOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	 //        		MPI_Recv(&phittOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	 //        		MPI_Recv(&phittOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
-	        		MPI_Recv(&thetattOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-	        		MPI_Recv(&thetattOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-	        		MPI_Recv(&thetattOut[2*nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);  
+	 //        		MPI_Recv(&thetattOut[localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	 //        		MPI_Recv(&thetattOut[nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	 //        		MPI_Recv(&thetattOut[2*nPos+localCoreStart],localCoreSize,MPI_DOUBLE,i,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);  
 
-				}
+		// 		}
 
-	        	for(i=0;i<nPos;i++){ testMerge << phittOut[i] << " " << phittOut[nPos+i] << " " << thetattOut[i] << " " << thetattOut[nPos+i] << " " << thetattOut[2*nPos+i] << endl; }
+	 //        	//for(i=0;i<nPos;i++){ testMerge << phittOut[i] << " " << phittOut[nPos+i] << " " << thetattOut[i] << " " << thetattOut[nPos+i] << " " << thetattOut[2*nPos+i] << endl; }
 
-	        	// testArray[1] = 10;
+	 //        	// testArray[1] = 10;
 
-	        	// cout << *foo << " " << *foo2 << endl;
+	 //        	// cout << *foo << " " << *foo2 << endl;
 
 
-	        } else{ MPI_Send(&phitt[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phitt[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[2*coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); }
+	 //        } else{ MPI_Send(&phitt[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&phitt[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[0],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); MPI_Send(&thetatt[2*coreSize],coreSize,MPI_DOUBLE,0,0,MPI_COMM_WORLD); }
 
-		}
+		// }
 
     // Barrier before going to the next timestep. Not sure if strictly neccessary but I'm a paranoid man.
 
