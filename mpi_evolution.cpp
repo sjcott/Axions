@@ -12,11 +12,11 @@ using namespace std;
 // Never adjusted but useful to define for functions
 const int nts = 2; // Number of time steps saved in data arrays
 
-const int nx = 401;
-const int ny = 401;
-const int nz = 401;
+const int nx = 1001;
+const int ny = 1001;
+const int nz = 1001;
 const int nPos = nx*ny*nz;
-const int nt = 8001;
+const int nt = 10001;
 const double dx = 0.5;
 const double dy = 0.5;
 const double dz = 0.5;
@@ -24,7 +24,7 @@ const double dt = 0.05;
 
 const double lambda = 1;
 const double eta = 1;
-const double g = 0;
+const double g = 1*sqrt(0.5*lambda);
 
 const int damped_nt = 200; // Number of time steps for which damping is imposed. Useful for random initial conditions
 const double dampFac = 0.5; // magnitude of damping term, unclear how strong to make this
@@ -37,13 +37,13 @@ const double scaling = 1; // Power law scaling of the scale factor. Using confor
 
 const bool makeGif = false; // Outputs data to make a gif of the isosurfaces. Not implemented in this version yet.
 const bool makeStringPosGif = true; // Outputs data to make a gif of the calculated string position and curvature data
-const int saveFreq = 5;
+const int saveFreq = 10;
 const int countRate = 10;
-const string gifTag = "global_PRS_dx0p5_";
+const string gifTag = "G1_PRS_dx0p5";
 
 // How are the initial conditions generated? Below are all parameters used for generating (or loading) the initial conditions
 const string ic_type = "random"; // Current options are data, stationary data and random
-const double seed = 42;
+const int seed = 42;
 const double mean = 0; // Probably always want this to be zero
 const double stdev = 0.5;
 
@@ -90,7 +90,7 @@ int main(int argc, char ** argv){
 
     }
 
-	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0), phitt(2*coreSize, 0.0), thetatt(3*coreSize, 0.0), energydensity(coreSize, 0.0), gaussDeviation(coreSize, 0.0);
+	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0), phitt(2*coreSize, 0.0), thetatt(3*coreSize, 0.0);//, energydensity(coreSize, 0.0), gaussDeviation(coreSize, 0.0);
 	double phixx,phiyy,phizz,energy,deviationParameter,damp,phit[2],phiMagSqr,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y,localSeed;
 	int x0,y0,z0,i,j,k,TimeStep,gifStringPosFrame,tNow,tPast,counter,comp,imx,ipx,imy,ipy,imz,ipz,ipxmy,ipxmz,imxpy,ipymz,imxpz,imypz;
 	int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
@@ -488,7 +488,7 @@ int main(int argc, char ** argv){
 
         	// Calculate where the strings cross through grid faces. Each point searches the faces on the positive side (i.e pxpy, pxpz and pypz) to avoid double counting
 
-	        if(stringDetect and (!detectBuffer or TimeStep>=damped_nt)){
+	        if(stringDetect and TimeStep%saveFreq==0 and (!detectBuffer or TimeStep>=damped_nt)){
 
 	        	double x,y,z,coeff1[2],coeff2[2],coeff3[2],coeff4[2],a,b,c,discrim,sol1,sol2;
 	        	int ipxpy,ipxpz,ipypz;
@@ -747,15 +747,33 @@ int main(int argc, char ** argv){
 
         // Next step is to collect all the intersections together on the master process and output them to text
 
-        if(stringDetect and (!detectBuffer or TimeStep>=damped_nt)){
+        if(stringDetect and TimeStep%saveFreq==0 and makeStringPosGif and stringsExist and (!detectBuffer or TimeStep>=damped_nt)){
 
 	        if(rank==0){
 
-	        	vector<double> xStringFull, yStringFull, zStringFull;
+	        	// Output the string crossings of each process one at a time to prevent the memory requirements on 1 node from getting too large.
 
-	        	xStringFull.insert(xStringFull.end(),xString.begin(),xString.end());
-	        	yStringFull.insert(yStringFull.end(),yString.begin(),yString.end());
-	        	zStringFull.insert(zStringFull.end(),zString.begin(),zString.end());
+	        	int numTotalIntersections = xString.size();
+
+	        	ss.str(string());
+	        	ss << gifStringPosFrame;
+	        	string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + gifTag + "_nx" + to_string(nx) + "_seed" + to_string(seed) + "_" + ss.str() + ".txt";
+	            ofstream gifStringPosData (gifStringPosDataPath.c_str());
+	            gifStringPosFrame+=1;
+
+	            // Output the data from the master process
+
+	            for(i=0;i<xString.size();i++){
+
+	            	gifStringPosData << xString[i] << " " << yString[i] << " " << zString[i] << endl;
+
+	            }
+
+	        	// vector<double> xStringFull, yStringFull, zStringFull;
+
+	        	// xStringFull.insert(xStringFull.end(),xString.begin(),xString.end());
+	        	// yStringFull.insert(yStringFull.end(),yString.begin(),yString.end());
+	        	// zStringFull.insert(zStringFull.end(),zString.begin(),zString.end());
 
 	        	for(i=1;i<size;i++){
 
@@ -764,41 +782,50 @@ int main(int argc, char ** argv){
 	        		int nIntersections;
 
 	        		MPI_Recv(&nIntersections,1,MPI_INT,i,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		numTotalIntersections += nIntersections;
 
 	        		// Declare vectors to receive each process's intersections and receive the data.
 
-	        		vector<double> localxString(nIntersections,0.0), localyString(nIntersections,0.0), localzString(nIntersections,0.0);
+	        		vector<double> xString(nIntersections,0.0), yString(nIntersections,0.0), zString(nIntersections,0.0);
 
-	        		MPI_Recv(&localxString[0],nIntersections,MPI_DOUBLE,i,2,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-	        		MPI_Recv(&localyString[0],nIntersections,MPI_DOUBLE,i,3,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-	        		MPI_Recv(&localzString[0],nIntersections,MPI_DOUBLE,i,4,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&xString[0],nIntersections,MPI_DOUBLE,i,2,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&yString[0],nIntersections,MPI_DOUBLE,i,3,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+	        		MPI_Recv(&zString[0],nIntersections,MPI_DOUBLE,i,4,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+	        		for(j=0;j<xString.size();j++){
+
+	        			gifStringPosData << xString[j] << " " << yString[j] << " " << zString[j] << endl;
+
+	        		}
 
 	        		// Append the data to the full collection of intersections
 
-	        		xStringFull.insert(xStringFull.end(),localxString.begin(),localxString.end());
-	        		yStringFull.insert(yStringFull.end(),localyString.begin(),localyString.end());
-	        		zStringFull.insert(zStringFull.end(),localzString.begin(),localzString.end());
+	        		// xStringFull.insert(xStringFull.end(),localxString.begin(),localxString.end());
+	        		// yStringFull.insert(yStringFull.end(),localyString.begin(),localyString.end());
+	        		// zStringFull.insert(zStringFull.end(),localzString.begin(),localzString.end());
 
 	        	}
 
+	        	if(numTotalIntersections==0){ stringsExist = false; }
+
 	        	// Full set of intersections are now collected on the master process. Now just output them to text.
 
-	        	if(makeStringPosGif and TimeStep%saveFreq == 0 and stringsExist){
+	        	// if(makeStringPosGif and stringsExist){
 
-	                ss.str(string());
-	                ss << gifStringPosFrame;
-	                string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + gifTag + "_nx_" + to_string(nx) + "_seed_" + to_string(round(seed)) + ss.str() + ".txt";
-	                ofstream gifStringPosData (gifStringPosDataPath.c_str());
-	                gifStringPosFrame+=1;
+	         //        ss.str(string());
+	         //        ss << gifStringPosFrame;
+	         //        string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + gifTag + "_nx" + to_string(nx) + "_seed" + to_string(round(seed)) + "_" + ss.str() + ".txt";
+	         //        ofstream gifStringPosData (gifStringPosDataPath.c_str());
+	         //        gifStringPosFrame+=1;
 
-	                for(i=0;i<xStringFull.size();i++){
+	         //        for(i=0;i<xStringFull.size();i++){
 
-	                    gifStringPosData << xStringFull[i] << " " << yStringFull[i] << " " << zStringFull[i] << endl;
+	         //            gifStringPosData << xStringFull[i] << " " << yStringFull[i] << " " << zStringFull[i] << endl;
 
-	                }
+	         //        }
 
-	                if(xStringFull.size() == 0){ stringsExist = false; }
-	            }
+	         //        if(xStringFull.size() == 0){ stringsExist = false; }
+	         //    }
 
 	        } else{
 

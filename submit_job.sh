@@ -1,7 +1,10 @@
 #!/bin/bash
 
 # Set the number of tasks
-#SBATCH --ntasks=128
+#SBATCH --ntasks=160
+
+# Set the memory limit
+#SBATCH --mem=23900MB
 
 # Set max wallclock time
 #SBATCH --time=200:00:00
@@ -42,7 +45,7 @@ mpirun -use-hwthread-cpus Executables/mpi_evolution
 
 #scp /home/sjcott/Documents/Axions/Data/valsPerLoop_loop801.txt sjcott@telesto.jb.man.ac.uk:/mirror2/scratch/sjcott/Documents/C++/Axions/Data/valsPerLoop_loop801.txt
 
-scp /home/sjcott/Documents/Axions/GifData/gifStringPosData* sjcott@telesto.jb.man.ac.uk:/mirror2/scratch/sjcott/Documents/C++/Axions/Centaurus/GifData/
+scp /home/sjcott/Documents/Axions/GifData/gifStringPosData_G1_PRS_dx0p5_nx1001* sjcott@telesto.jb.man.ac.uk:/mirror2/scratch/sjcott/Documents/C++/Axions/Centaurus/GifData/
 
 
 # Finally delete the output file (any slurm... files)
