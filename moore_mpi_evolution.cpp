@@ -24,9 +24,14 @@ const double dy = 0.25;
 const double dz = 0.25;
 const double dt = 0.05;
 
-const double lambda = 1;
-const double eta = 1;
-const double g = 0*sqrt(0.5*lambda); // fracBPS*g_BPS
+const double lambda1 = 1;
+const double lambda2 = 1;
+const double lambda12 = 0;
+const double eta1 = 1;
+const double eta2 = 1;
+const int q1 = 2;
+const int q2 = q1 - 1;
+const double g = sqrt(0.5*lambda1*pow(eta1,2)/(q1*q1 + q2*q2)); // Specific choice that sets all masses equal (assuming m1=m2)
 
 const int damped_nt = 200; // Number of time steps for which damping is imposed. Useful for random initial conditions
 const double dampFac = 0.5; // magnitude of damping term, unclear how strong to make this
@@ -35,13 +40,13 @@ const double dampFac = 0.5; // magnitude of damping term, unclear how strong to 
 // Set alpha to zero to recover a non-expanding universe. Note that non-zero is not standard expansion but PRS algorithm.
 
 const double alpha = 3; // Factor multiplying hubble damping term for use in PRS algorithm. alpha = #dims has been claimed to give similar dynamics without changing string width.
-const double scaling = 1; // Power law scaling of the scale factor. Using conformal time so rad dom is gamma=1 while matter dom is gamma=2. gamma=0 returns a static universe
+const double scaling = 1; // Power law scaling of the scale factor. Using conformal time so rad dom is gamma=1 while matter dom is gamma=2.
 
 const bool makeGif = false; // Outputs data to make a gif of the isosurfaces. Not implemented in this version yet.
 const bool makeStringPosGif = true; // Outputs data to make a gif of the calculated string position and curvature data
 const int saveFreq = 5;
 const int countRate = 10;
-const string outTag = "global_PRS_dx0p25";
+const string outTag = "Moore_PRS_dx0p25";
 
 // How are the initial conditions generated? Below are all parameters used for generating (or loading) the initial conditions
 const string ic_type = "random"; // Current options are data, stationary data and random
@@ -88,12 +93,13 @@ int main(int argc, char ** argv){
 
     	if(size==1){ cout << "Warning: Only one processor being used. This code is not designed for only one processor and may not work." << endl; }
     	if(chunk<haloSize){ cout << "Warning: Chunk size is less than the halo size (i.e chunk neighbour data). Code currently assumes this is not the case so it probably won't work." << endl; }
+        if(ic_type!="random"){ cout << "Warning: This ic type is left over from other code. Currently only random is working. Small adjustments need to be made in the other cases." << endl; }
 
     }
 
-	vector<double> phi(2*2*totSize, 0.0), theta(3*2*totSize, 0.0);//, phitt(2*coreSize, 0.0), thetatt(3*coreSize, 0.0);//, energydensity(coreSize, 0.0), gaussDeviation(coreSize, 0.0);
-	double phixx,phiyy,phizz,localEnergy,deviationParameter,damp,phit[2],phiMagSqr,curx,cury,curz,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y,localSeed,phitt[2],thetatt[3],thetat[3],phix[2],phiy[2],phiz[2],
-		   Fxy,Fxz,Fyz,FCont,thetaDotCont;
+	vector<double> phi1(2*2*totSize, 0.0), phi2(2*2*totSize, 0.0), theta(3*2*totSize, 0.0);//, phitt(2*coreSize, 0.0), thetatt(3*coreSize, 0.0);//, energydensity(coreSize, 0.0), gaussDeviation(coreSize, 0.0);
+	double phi1xx,phi1yy,phi1zz,phi2xx,phi2yy,phi2zz,localEnergy,deviationParameter,damp,phi1t[2],phi2t[2],phi1MagSqr,phi2MagSqr,cur1x,cur1y,cur1z,cur2x,cur2y,cur2z,Fxy_y,Fxz_z,Fyx_x,Fyz_z,Fzx_x,Fzy_y,
+           localSeed,phi1tt[2],phi2tt[2],thetatt[3],phi1x[2],phi1y[2],phi1z[2],phi2x[2],phi2y[2],phi2z[2],thetaDotCont,Fxy,Fxz,Fyz,FCont,thetat[3];
 	int x0,y0,z0,i,j,k,TimeStep,gifStringPosFrame,tNow,tPast,counter,comp,imx,ipx,imy,ipy,imz,ipz,ipxmy,ipxmz,imxpy,ipymz,imxpz,imypz;
 	int c[2] = {1,-1}; // Useful definition to allow covariant deviative to be calculated when looping over components.
 
@@ -118,7 +124,7 @@ int main(int argc, char ** argv){
 
     string icPath = dir_path + "/Data/ic.txt";
     string finalFieldPath = dir_path + "/Data/finalField.txt";
-    string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + outTag + "_nx" + to_string(nx) + "_seed" + to_string(seed) + ".txt";
+    string valsPerLoopPath = dir_path + "/Data/valsPerLoop_" + outTag + "_nx" + to_string(nx) + "_q1" + to_string(q1) + "_seed" + to_string(seed) + ".txt";
     // string testPath = dir_path + "/Data/test_" + to_string(rank) + ".txt";
     // string testMergePath = dir_path + "/Data/test_" + gifTag + ".txt";
 
@@ -153,12 +159,12 @@ int main(int argc, char ** argv){
 
     				int arrayPos = i-(dataStart+nPos)%nPos;
 
-    				ic >> phi[arrayPos] >> phi[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
+    				ic >> phi1[arrayPos] >> phi1[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
 
     				// Second time step is equal to the first
 
-    				phi[totSize+arrayPos] = phi[arrayPos];
-    				phi[totSize*(nts+1)+arrayPos] = phi[totSize*nts+arrayPos];
+    				phi1[totSize+arrayPos] = phi1[arrayPos];
+    				phi1[totSize*(nts+1)+arrayPos] = phi1[totSize*nts+arrayPos];
     				theta[totSize+arrayPos] = theta[arrayPos];
     				theta[totSize*(nts+1)+arrayPos] = theta[totSize*nts+arrayPos];
     				theta[totSize*(nts*2+1)+arrayPos] = theta[totSize*nts*2+arrayPos];
@@ -167,10 +173,10 @@ int main(int argc, char ** argv){
 
     				int arrayPos = i+haloSize; // Shift across to account for the backward halo at the start
 
-    				ic >> phi[arrayPos] >> phi[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
+    				ic >> phi1[arrayPos] >> phi1[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
 
-    				phi[totSize+arrayPos] = phi[arrayPos];
-    				phi[totSize*(nts+1)+arrayPos] = phi[totSize*nts+arrayPos];
+    				phi1[totSize+arrayPos] = phi1[arrayPos];
+    				phi1[totSize*(nts+1)+arrayPos] = phi1[totSize*nts+arrayPos];
     				theta[totSize+arrayPos] = theta[arrayPos];
     				theta[totSize*(nts+1)+arrayPos] = theta[totSize*nts+arrayPos];
     				theta[totSize*(nts*2+1)+arrayPos] = theta[totSize*nts*2+arrayPos];
@@ -184,10 +190,10 @@ int main(int argc, char ** argv){
 
     				int arrayPos = i-dataStart;
 
-					ic >> phi[arrayPos] >> phi[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
+					ic >> phi1[arrayPos] >> phi1[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
 
-    				phi[totSize+arrayPos] = phi[arrayPos];
-    				phi[totSize*(nts+1)+arrayPos] = phi[totSize*nts+arrayPos];
+    				phi1[totSize+arrayPos] = phi1[arrayPos];
+    				phi1[totSize*(nts+1)+arrayPos] = phi1[totSize*nts+arrayPos];
     				theta[totSize+arrayPos] = theta[arrayPos];
     				theta[totSize*(nts+1)+arrayPos] = theta[totSize*nts+arrayPos];
     				theta[totSize*(nts*2+1)+arrayPos] = theta[totSize*nts*2+arrayPos]; 				
@@ -196,10 +202,10 @@ int main(int argc, char ** argv){
 
     				int arrayPos = i+coreSize+haloSize;
 
-    				ic >> phi[arrayPos] >> phi[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
+    				ic >> phi1[arrayPos] >> phi1[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
 
-    				phi[totSize+arrayPos] = phi[arrayPos];
-    				phi[totSize*(nts+1)+arrayPos] = phi[totSize*nts+arrayPos];
+    				phi1[totSize+arrayPos] = phi1[arrayPos];
+    				phi1[totSize*(nts+1)+arrayPos] = phi1[totSize*nts+arrayPos];
     				theta[totSize+arrayPos] = theta[arrayPos];
     				theta[totSize*(nts+1)+arrayPos] = theta[totSize*nts+arrayPos];
     				theta[totSize*(nts*2+1)+arrayPos] = theta[totSize*nts*2+arrayPos]; 
@@ -212,10 +218,10 @@ int main(int argc, char ** argv){
 
     				int arrayPos = i-dataStart;
 
-    				ic >> phi[arrayPos] >> phi[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
+    				ic >> phi1[arrayPos] >> phi1[totSize*nts+arrayPos] >> theta[arrayPos] >> theta[totSize*nts+arrayPos] >> theta[totSize*nts*2+arrayPos];
 
-    				phi[totSize+arrayPos] = phi[arrayPos];
-    				phi[totSize*(nts+1)+arrayPos] = phi[totSize*nts+arrayPos];
+    				phi1[totSize+arrayPos] = phi1[arrayPos];
+    				phi1[totSize*(nts+1)+arrayPos] = phi1[totSize*nts+arrayPos];
     				theta[totSize+arrayPos] = theta[arrayPos];
     				theta[totSize*(nts+1)+arrayPos] = theta[totSize*nts+arrayPos];
     				theta[totSize*(nts*2+1)+arrayPos] = theta[totSize*nts*2+arrayPos]; 
@@ -237,14 +243,14 @@ int main(int argc, char ** argv){
 
 	    				int arrayPos = i-(dataStart+nPos)%nPos;
 
-	    				ic >> phi[totSize*TimeStep+arrayPos] >> phi[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
+	    				ic >> phi1[totSize*TimeStep+arrayPos] >> phi1[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
 	    				   >> theta[totSize*(nts*2+TimeStep)+arrayPos];
 
 	    			} else if(i<dataEnd){ // The rest of the data
 
 	    				int arrayPos = i+haloSize; // Shift across to account for the backward halo at the start
 
-	    				ic >> phi[totSize*TimeStep+arrayPos] >> phi[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
+	    				ic >> phi1[totSize*TimeStep+arrayPos] >> phi1[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
 	    				   >> theta[totSize*(nts*2+TimeStep)+arrayPos];
 
 	    			} else{ ic >> wasteData[0] >> wasteData[1] >> wasteData[2] >> wasteData[3] >> wasteData[4]; } // Don't need these so waste them into an unused variable 
@@ -256,14 +262,14 @@ int main(int argc, char ** argv){
 
 	    				int arrayPos = i-dataStart;
 
-						ic >> phi[totSize*TimeStep+arrayPos] >> phi[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
+						ic >> phi1[totSize*TimeStep+arrayPos] >> phi1[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
 	    				   >> theta[totSize*(nts*2+TimeStep)+arrayPos];				
 
 	    			} else if(i<dataEnd%nPos){ // The forward halo
 
 	    				int arrayPos = i+coreSize+haloSize;
 
-	    				ic >> phi[totSize*TimeStep+arrayPos] >> phi[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
+	    				ic >> phi1[totSize*TimeStep+arrayPos] >> phi1[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
 	    				   >> theta[totSize*(nts*2+TimeStep)+arrayPos];
 
 	    			} else{ ic >> wasteData[0] >> wasteData[1] >> wasteData[2] >> wasteData[3] >> wasteData[4]; }
@@ -274,7 +280,7 @@ int main(int argc, char ** argv){
 
 	    				int arrayPos = i-dataStart;
 
-	    				ic >> phi[totSize*TimeStep+arrayPos] >> phi[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
+	    				ic >> phi1[totSize*TimeStep+arrayPos] >> phi1[totSize*(nts+TimeStep)+arrayPos] >> theta[totSize*TimeStep+arrayPos] >> theta[totSize*(nts+TimeStep)+arrayPos] 
 	    				   >> theta[totSize*(nts*2+TimeStep)+arrayPos];
 
 	    			} else{ ic >> wasteData[0] >> wasteData[1] >> wasteData[2] >> wasteData[3] >> wasteData[4]; }
@@ -291,21 +297,26 @@ int main(int argc, char ** argv){
         uniform_real_distribution<double> distribution (0.0, 2*pi); // Uniform distribution for the phase of the strings
         double phase;
 
-        // Skip the random numbers ahead to the appropriate point.
+        // Skip the random numbers ahead to the appropriate point
         for(i=0;i<coreStart;i++){ phase = distribution(generator); }
 
 
 
         for(i=haloSize;i<coreSize+haloSize;i++){
 
-        	phase = distribution(generator);
+            phase = distribution(generator);
 
-        	phi[i] = eta*cos(phase);
-        	phi[totSize*nts+i] = eta*sin(phase);
+            // Set the phase of both fields to be equal so that only (1,1) strings are created
+            phi1[i] = eta1*cos(phase);
+            phi1[totSize*nts+i] = eta1*sin(phase);
+            phi2[i] = eta2*cos(phase);
+            phi2[totSize*nts+i] = eta2*sin(phase);
 
         	// Set next timestep as equal to the first
-        	phi[totSize+i] = phi[i];
-        	phi[totSize*(nts+1)+i] = phi[totSize*nts+i];
+        	phi1[totSize+i] = phi1[i];
+        	phi1[totSize*(nts+1)+i] = phi1[totSize*nts+i];
+            phi2[totSize+i] = phi2[i];
+            phi2[totSize*(nts+1)+i] = phi2[totSize*nts+i];
 
         	// Leave the gauge fields as zero (set by initialisation)
 
@@ -317,17 +328,30 @@ int main(int argc, char ** argv){
 
         for(comp=0;comp<2;comp++){ 
 
-        	MPI_Sendrecv(&phi[totSize*nts*comp+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
-        				 &phi[totSize*nts*comp+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+        	MPI_Sendrecv(&phi1[totSize*nts*comp+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
+        				 &phi1[totSize*nts*comp+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
 
-        	MPI_Sendrecv(&phi[totSize*nts*comp+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
-        				 &phi[totSize*nts*comp],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        	MPI_Sendrecv(&phi1[totSize*nts*comp+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+        				 &phi1[totSize*nts*comp],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
-        	MPI_Sendrecv(&phi[totSize*(nts*comp+1)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,1, // Send this
-        				 &phi[totSize*(nts*comp+1)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+        	MPI_Sendrecv(&phi1[totSize*(nts*comp+1)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,1, // Send this
+        				 &phi1[totSize*(nts*comp+1)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
 
-        	MPI_Sendrecv(&phi[totSize*(nts*comp+1)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,
-        				 &phi[totSize*(nts*comp+1)],haloSize,MPI_DOUBLE,(rank-1+size)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        	MPI_Sendrecv(&phi1[totSize*(nts*comp+1)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,
+        				 &phi1[totSize*(nts*comp+1)],haloSize,MPI_DOUBLE,(rank-1+size)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+
+            MPI_Sendrecv(&phi2[totSize*nts*comp+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
+                         &phi2[totSize*nts*comp+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+
+            MPI_Sendrecv(&phi2[totSize*nts*comp+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+                         &phi2[totSize*nts*comp],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+            MPI_Sendrecv(&phi2[totSize*(nts*comp+1)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,1, // Send this
+                         &phi2[totSize*(nts*comp+1)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+
+            MPI_Sendrecv(&phi2[totSize*(nts*comp+1)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,1,
+                         &phi2[totSize*(nts*comp+1)],haloSize,MPI_DOUBLE,(rank-1+size)%size,1,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
         }
 
@@ -405,7 +429,8 @@ int main(int argc, char ** argv){
         	imypz = (imy+dataStart+1)%nz + ( (imy+dataStart)/nz )*nz - dataStart;
 
 
-	        phiMagSqr = pow(phi[totSize*tNow+i],2) + pow(phi[totSize*(nts+tNow)+i],2);
+	        phi1MagSqr = pow(phi1[totSize*tNow+i],2) + pow(phi1[totSize*(nts+tNow)+i],2);
+            phi2MagSqr = pow(phi2[totSize*tNow+i],2) + pow(phi2[totSize*(nts+tNow)+i],2);
 
             // Loop over phi components
 
@@ -415,21 +440,35 @@ int main(int argc, char ** argv){
 
                 // c is 1 when comp = 0 and -1 when comp = 1
 
-                phixx = ( cos(theta[totSize*tNow+i])*phi[totSize*(nts*comp+tNow)+ipx] + c[comp]*sin(theta[totSize*tNow+i])*phi[totSize*(nts*(comp+c[comp])+tNow)+ipx] - 2*phi[totSize*(nts*comp+tNow)+i]
-                		+ cos(theta[totSize*tNow+imx])*phi[totSize*(nts*comp+tNow)+imx] - c[comp]*sin(theta[totSize*tNow+imx])*phi[totSize*(nts*(comp+c[comp])+tNow)+imx] )/(dx*dx);
+                phi1xx = ( cos(q1*theta[totSize*tNow+i])*phi1[totSize*(nts*comp+tNow)+ipx] + c[comp]*sin(q1*theta[totSize*tNow+i])*phi1[totSize*(nts*(comp+c[comp])+tNow)+ipx] - 2*phi1[totSize*(nts*comp+tNow)+i]
+                		 + cos(q1*theta[totSize*tNow+imx])*phi1[totSize*(nts*comp+tNow)+imx] - c[comp]*sin(q1*theta[totSize*tNow+imx])*phi1[totSize*(nts*(comp+c[comp])+tNow)+imx] )/(dx*dx);
 
-                phiyy = ( cos(theta[totSize*(nts+tNow)+i])*phi[totSize*(nts*comp+tNow)+ipy] + c[comp]*sin(theta[totSize*(nts+tNow)+i])*phi[totSize*(nts*(comp+c[comp])+tNow)+ipy] - 2*phi[totSize*(nts*comp+tNow)+i]
-                		+ cos(theta[totSize*(nts+tNow)+imy])*phi[totSize*(nts*comp+tNow)+imy] - c[comp]*sin(theta[totSize*(nts+tNow)+imy])*phi[totSize*(nts*(comp+c[comp])+tNow)+imy] )/(dy*dy);
+                phi1yy = ( cos(q1*theta[totSize*(nts+tNow)+i])*phi1[totSize*(nts*comp+tNow)+ipy] + c[comp]*sin(q1*theta[totSize*(nts+tNow)+i])*phi1[totSize*(nts*(comp+c[comp])+tNow)+ipy] - 2*phi1[totSize*(nts*comp+tNow)+i]
+                		 + cos(q1*theta[totSize*(nts+tNow)+imy])*phi1[totSize*(nts*comp+tNow)+imy] - c[comp]*sin(q1*theta[totSize*(nts+tNow)+imy])*phi1[totSize*(nts*(comp+c[comp])+tNow)+imy] )/(dy*dy);
 
-                phizz = ( cos(theta[totSize*(nts*2+tNow)+i])*phi[totSize*(nts*comp+tNow)+ipz] + c[comp]*sin(theta[totSize*(nts*2+tNow)+i])*phi[totSize*(nts*(comp+c[comp])+tNow)+ipz] - 2*phi[totSize*(nts*comp+tNow)+i]
-                		+ cos(theta[totSize*(nts*2+tNow)+imz])*phi[totSize*(nts*comp+tNow)+imz] - c[comp]*sin(theta[totSize*(nts*2+tNow)+imz])*phi[totSize*(nts*(comp+c[comp])+tNow)+imz] )/(dz*dz);
+                phi1zz = ( cos(q1*theta[totSize*(nts*2+tNow)+i])*phi1[totSize*(nts*comp+tNow)+ipz] + c[comp]*sin(q1*theta[totSize*(nts*2+tNow)+i])*phi1[totSize*(nts*(comp+c[comp])+tNow)+ipz] - 2*phi1[totSize*(nts*comp+tNow)+i]
+                		 + cos(q1*theta[totSize*(nts*2+tNow)+imz])*phi1[totSize*(nts*comp+tNow)+imz] - c[comp]*sin(q1*theta[totSize*(nts*2+tNow)+imz])*phi1[totSize*(nts*(comp+c[comp])+tNow)+imz] )/(dz*dz);
 
 
-                phit[comp] = ( phi[totSize*(nts*comp+tNow)+i] - phi[totSize*(nts*comp+tPast)+i] )/dt;
+                phi2xx = ( cos(q2*theta[totSize*tNow+i])*phi2[totSize*(nts*comp+tNow)+ipx] + c[comp]*sin(q2*theta[totSize*tNow+i])*phi2[totSize*(nts*(comp+c[comp])+tNow)+ipx] - 2*phi2[totSize*(nts*comp+tNow)+i]
+                         + cos(q2*theta[totSize*tNow+imx])*phi2[totSize*(nts*comp+tNow)+imx] - c[comp]*sin(q2*theta[totSize*tNow+imx])*phi2[totSize*(nts*(comp+c[comp])+tNow)+imx] )/(dx*dx);
 
-                // Calculate the second order time derivative and update the field
-                phitt[comp] = phixx + phiyy + phizz - 0.5*lambda*(phiMagSqr - pow(eta,2))*phi[totSize*(nts*comp+tNow)+i] - (damp + alpha*scaling/time)*phit[comp];
-                phi[totSize*(nts*comp+tPast)+i] = 2*phi[totSize*(nts*comp+tNow)+i] - phi[totSize*(nts*comp+tPast)+i] + dt*dt*phitt[comp];
+                phi2yy = ( cos(q2*theta[totSize*(nts+tNow)+i])*phi2[totSize*(nts*comp+tNow)+ipy] + c[comp]*sin(q2*theta[totSize*(nts+tNow)+i])*phi2[totSize*(nts*(comp+c[comp])+tNow)+ipy] - 2*phi2[totSize*(nts*comp+tNow)+i]
+                         + cos(q2*theta[totSize*(nts+tNow)+imy])*phi2[totSize*(nts*comp+tNow)+imy] - c[comp]*sin(q2*theta[totSize*(nts+tNow)+imy])*phi2[totSize*(nts*(comp+c[comp])+tNow)+imy] )/(dy*dy);
+
+                phi2zz = ( cos(q2*theta[totSize*(nts*2+tNow)+i])*phi2[totSize*(nts*comp+tNow)+ipz] + c[comp]*sin(q2*theta[totSize*(nts*2+tNow)+i])*phi2[totSize*(nts*(comp+c[comp])+tNow)+ipz] - 2*phi2[totSize*(nts*comp+tNow)+i]
+                         + cos(q2*theta[totSize*(nts*2+tNow)+imz])*phi2[totSize*(nts*comp+tNow)+imz] - c[comp]*sin(q2*theta[totSize*(nts*2+tNow)+imz])*phi2[totSize*(nts*(comp+c[comp])+tNow)+imz] )/(dz*dz);
+
+
+                phi1t[comp] = ( phi1[totSize*(nts*comp+tNow)+i] - phi1[totSize*(nts*comp+tPast)+i] )/dt;
+                phi2t[comp] = ( phi2[totSize*(nts*comp+tNow)+i] - phi2[totSize*(nts*comp+tPast)+i] )/dt;
+
+                // Calculate the second order time derivatives and update the fields
+                phi1tt[comp] = phi1xx + phi1yy + phi1zz - ( 0.5*lambda1*(phi1MagSqr - pow(eta1,2)) + 0.5*lambda12*(phi2MagSqr - pow(eta2,2)) )*phi1[totSize*(nts*comp+tNow)+i] - (damp + alpha*scaling/time)*phi1t[comp];
+                phi1[totSize*(nts*comp+tPast)+i] = 2*phi1[totSize*(nts*comp+tNow)+i] - phi1[totSize*(nts*comp+tPast)+i] + dt*dt*phi1tt[comp];
+
+                phi2tt[comp] = phi2xx + phi2yy + phi2zz - ( 0.5*lambda2*(phi2MagSqr - pow(eta2,2)) + 0.5*lambda12*(phi1MagSqr - pow(eta1,2)) )*phi2[totSize*(nts*comp+tNow)+i] - (damp + alpha*scaling/time)*phi2t[comp];
+                phi2[totSize*(nts*comp+tPast)+i] = 2*phi2[totSize*(nts*comp+tNow)+i] - phi2[totSize*(nts*comp+tPast)+i] + dt*dt*phi2tt[comp];
 
 
                 // Calculate second order time derivatives
@@ -456,14 +495,24 @@ int main(int argc, char ** argv){
 
             // Calculate the currents
 
-            curx = cos(theta[totSize*tNow+i])*(phi[totSize*(nts+tNow)+i]*phi[totSize*tNow+ipx] - phi[totSize*tNow+i]*phi[totSize*(nts+tNow)+ipx]) +
-                   sin(theta[totSize*tNow+i])*(phi[totSize*tNow+i]*phi[totSize*tNow+ipx] + phi[totSize*(nts+tNow)+i]*phi[totSize*(nts+tNow)+ipx]);
+            cur1x = cos(q1*theta[totSize*tNow+i])*(phi1[totSize*(nts+tNow)+i]*phi1[totSize*tNow+ipx] - phi1[totSize*tNow+i]*phi1[totSize*(nts+tNow)+ipx]) +
+                    sin(q1*theta[totSize*tNow+i])*(phi1[totSize*tNow+i]*phi1[totSize*tNow+ipx] + phi1[totSize*(nts+tNow)+i]*phi1[totSize*(nts+tNow)+ipx]);
 
-            cury = cos(theta[totSize*(nts+tNow)+i])*(phi[totSize*(nts+tNow)+i]*phi[totSize*tNow+ipy] - phi[totSize*tNow+i]*phi[totSize*(nts+tNow)+ipy]) +
-                   sin(theta[totSize*(nts+tNow)+i])*(phi[totSize*tNow+i]*phi[totSize*tNow+ipy] + phi[totSize*(nts+tNow)+i]*phi[totSize*(nts+tNow)+ipy]);
+            cur1y = cos(q1*theta[totSize*(nts+tNow)+i])*(phi1[totSize*(nts+tNow)+i]*phi1[totSize*tNow+ipy] - phi1[totSize*tNow+i]*phi1[totSize*(nts+tNow)+ipy]) +
+                    sin(q1*theta[totSize*(nts+tNow)+i])*(phi1[totSize*tNow+i]*phi1[totSize*tNow+ipy] + phi1[totSize*(nts+tNow)+i]*phi1[totSize*(nts+tNow)+ipy]);
 
-            curz = cos(theta[totSize*(nts*2+tNow)+i])*(phi[totSize*(nts+tNow)+i]*phi[totSize*tNow+ipz] - phi[totSize*tNow+i]*phi[totSize*(nts+tNow)+ipz]) +
-                   sin(theta[totSize*(nts*2+tNow)+i])*(phi[totSize*tNow+i]*phi[totSize*tNow+ipz] + phi[totSize*(nts+tNow)+i]*phi[totSize*(nts+tNow)+ipz]);
+            cur1z = cos(q1*theta[totSize*(nts*2+tNow)+i])*(phi1[totSize*(nts+tNow)+i]*phi1[totSize*tNow+ipz] - phi1[totSize*tNow+i]*phi1[totSize*(nts+tNow)+ipz]) +
+                    sin(q1*theta[totSize*(nts*2+tNow)+i])*(phi1[totSize*tNow+i]*phi1[totSize*tNow+ipz] + phi1[totSize*(nts+tNow)+i]*phi1[totSize*(nts+tNow)+ipz]);
+
+
+            cur2x = cos(q2*theta[totSize*tNow+i])*(phi2[totSize*(nts+tNow)+i]*phi2[totSize*tNow+ipx] - phi2[totSize*tNow+i]*phi2[totSize*(nts+tNow)+ipx]) +
+                    sin(q2*theta[totSize*tNow+i])*(phi2[totSize*tNow+i]*phi2[totSize*tNow+ipx] + phi2[totSize*(nts+tNow)+i]*phi2[totSize*(nts+tNow)+ipx]);
+
+            cur2y = cos(q2*theta[totSize*(nts+tNow)+i])*(phi2[totSize*(nts+tNow)+i]*phi2[totSize*tNow+ipy] - phi2[totSize*tNow+i]*phi2[totSize*(nts+tNow)+ipy]) +
+                    sin(q2*theta[totSize*(nts+tNow)+i])*(phi2[totSize*tNow+i]*phi2[totSize*tNow+ipy] + phi2[totSize*(nts+tNow)+i]*phi2[totSize*(nts+tNow)+ipy]);
+
+            cur2z = cos(q2*theta[totSize*(nts*2+tNow)+i])*(phi2[totSize*(nts+tNow)+i]*phi2[totSize*tNow+ipz] - phi2[totSize*tNow+i]*phi2[totSize*(nts+tNow)+ipz]) +
+                    sin(q2*theta[totSize*(nts*2+tNow)+i])*(phi2[totSize*tNow+i]*phi2[totSize*tNow+ipz] + phi2[totSize*(nts+tNow)+i]*phi2[totSize*(nts+tNow)+ipz]);
 
 
             // Calculate the derivatives of the field tensor (lattice version).
@@ -492,9 +541,9 @@ int main(int argc, char ** argv){
             thetat[2] = ( theta[totSize*(nts*2+tNow)+i] - theta[totSize*(nts*2+tPast)+i] )/dt;
 
             // Calculate second order time derivatives and update
-            thetatt[0] = -2*g*g*curx - Fxy_y - Fxz_z - damp*thetat[0];
-            thetatt[1] = -2*g*g*cury - Fyx_x - Fyz_z - damp*thetat[1];
-            thetatt[2] = -2*g*g*curz - Fzx_x - Fzy_y - damp*thetat[2];
+            thetatt[0] = -2*g*g*(cur1x+cur2x) - Fxy_y - Fxz_z - damp*thetat[0];
+            thetatt[1] = -2*g*g*(cur1y+cur2y) - Fyx_x - Fyz_z - damp*thetat[1];
+            thetatt[2] = -2*g*g*(cur1z+cur2z) - Fzx_x - Fzy_y - damp*thetat[2];
 
             theta[totSize*tPast+i] = 2*theta[totSize*tNow+i] - theta[totSize*tPast+i] + dt*dt*thetatt[0];
             theta[totSize*(nts+tPast)+i] = 2*theta[totSize*(nts+tNow)+i] - theta[totSize*(nts+tPast)+i] + dt*dt*thetatt[1];
@@ -510,9 +559,14 @@ int main(int argc, char ** argv){
 
                 for(comp=0;comp<2;comp++){
 
-                    phix[comp] = ( phi[totSize*(nts*comp+tNow)+i] - cos(theta[totSize*tNow+imx])*phi[totSize*(nts*comp+tNow)+imx] + c[comp]*sin(theta[totSize*tNow+imx])*phi[totSize*(nts*(comp+c[comp])+tNow)+imx] )/dx;
-                    phiy[comp] = ( phi[totSize*(nts*comp+tNow)+i] - cos(theta[totSize*(nts+tNow)+imy])*phi[totSize*(nts*comp+tNow)+imy] + c[comp]*sin(theta[totSize*(nts+tNow)+imy])*phi[totSize*(nts*(comp+c[comp])+tNow)+imy] )/dy;
-                    phiz[comp] = ( phi[totSize*(nts*comp+tNow)+i] - cos(theta[totSize*(nts*2+tNow)+imz])*phi[totSize*(nts*comp+tNow)+imz] + c[comp]*sin(theta[totSize*(nts*2+tNow)+imz])*phi[totSize*(nts*(comp+c[comp])+tNow)+imz] )/dz;
+                    phi1x[comp] = ( phi1[totSize*(nts*comp+tNow)+i] - cos(q1*theta[totSize*tNow+imx])*phi1[totSize*(nts*comp+tNow)+imx] + c[comp]*sin(q1*theta[totSize*tNow+imx])*phi1[totSize*(nts*(comp+c[comp])+tNow)+imx] )/dx;
+                    phi1y[comp] = ( phi1[totSize*(nts*comp+tNow)+i] - cos(q1*theta[totSize*(nts+tNow)+imy])*phi1[totSize*(nts*comp+tNow)+imy] + c[comp]*sin(q1*theta[totSize*(nts+tNow)+imy])*phi1[totSize*(nts*(comp+c[comp])+tNow)+imy] )/dy;
+                    phi1z[comp] = ( phi1[totSize*(nts*comp+tNow)+i] - cos(q1*theta[totSize*(nts*2+tNow)+imz])*phi1[totSize*(nts*comp+tNow)+imz] + c[comp]*sin(q1*theta[totSize*(nts*2+tNow)+imz])*phi1[totSize*(nts*(comp+c[comp])+tNow)+imz] )/dz;
+
+                    phi2x[comp] = ( phi2[totSize*(nts*comp+tNow)+i] - cos(q2*theta[totSize*tNow+imx])*phi2[totSize*(nts*comp+tNow)+imx] + c[comp]*sin(q2*theta[totSize*tNow+imx])*phi2[totSize*(nts*(comp+c[comp])+tNow)+imx] )/dx;
+                    phi2y[comp] = ( phi2[totSize*(nts*comp+tNow)+i] - cos(q2*theta[totSize*(nts+tNow)+imy])*phi2[totSize*(nts*comp+tNow)+imy] + c[comp]*sin(q2*theta[totSize*(nts+tNow)+imy])*phi2[totSize*(nts*(comp+c[comp])+tNow)+imy] )/dy;
+                    phi2z[comp] = ( phi2[totSize*(nts*comp+tNow)+i] - cos(q2*theta[totSize*(nts*2+tNow)+imz])*phi2[totSize*(nts*comp+tNow)+imz] + c[comp]*sin(q2*theta[totSize*(nts*2+tNow)+imz])*phi2[totSize*(nts*(comp+c[comp])+tNow)+imz] )/dz;
+
 
                 }
 
@@ -526,14 +580,18 @@ int main(int argc, char ** argv){
 
                 FCont = Fxy + Fxz + Fyz;
 
-                localEnergy += ( pow(phit[0],2) + pow(phit[1],2) + pow(phix[0],2) + pow(phix[1],2) + pow(phiy[0],2) + pow(phiy[1],2) + pow(phiz[0],2) + pow(phiz[1],2)
-                               + thetaDotCont + FCont + 0.25*lambda*pow(phiMagSqr-pow(eta,2),2) )*dx*dy*dz;
+                localEnergy += ( pow(phi1t[0],2) + pow(phi1t[1],2) + pow(phi1x[0],2) + pow(phi1x[1],2) + pow(phi1y[0],2) + pow(phi1y[1],2) + pow(phi1z[0],2) + pow(phi1z[1],2)
+                               + pow(phi2t[0],2) + pow(phi2t[1],2) + pow(phi2x[0],2) + pow(phi2x[1],2) + pow(phi2y[0],2) + pow(phi2y[1],2) + pow(phi2z[0],2) + pow(phi2z[1],2)
+                               + thetaDotCont + FCont + 0.25*lambda1*pow(phi1MagSqr-pow(eta1,2),2) + 0.25*lambda2*pow(phi2MagSqr-pow(eta2,2),2)
+                               + 0.5*lambda12*(phi1MagSqr-pow(eta1,2))*(phi2MagSqr-pow(eta2,2)) )*dx*dy*dz;
 
             }
 
         	// Calculate where the strings cross through grid faces. Each point searches the faces on the positive side (i.e pxpy, pxpz and pypz) to avoid double counting
 
 	        if(stringDetect and TimeStep%saveFreq==0 and (!detectBuffer or TimeStep>=damped_nt)){
+
+                // Only calculates the string positions for phi1, the logic being that phi2 string positions should, in theory, be very close.
 
 	        	double x,y,z,coeff1[2],coeff2[2],coeff3[2],coeff4[2],a,b,c,discrim,sol1,sol2;
 	        	int ipxpy,ipxpz,ipypz;
@@ -553,10 +611,10 @@ int main(int argc, char ** argv){
 
 		            // Do the same process for the real and imaginary components
 
-		            coeff1[comp] = phi[totSize*(nts*comp+tNow)+ipxpy] - phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipy] + phi[totSize*(nts*comp+tNow)+i];
-		            coeff2[comp] = (y+dy)*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+i]) + y*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+ipxpy]);
-		            coeff3[comp] = (x+dx)*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+i]) + x*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipxpy]);
-		            coeff4[comp] = (x+dx)*( (y+dy)*phi[totSize*(nts*comp+tNow)+i] - y*phi[totSize*(nts*comp+tNow)+ipy] ) - x*( (y+dy)*phi[totSize*(nts*comp+tNow)+ipx] - y*phi[totSize*(nts*comp+tNow)+ipxpy] );
+		            coeff1[comp] = phi1[totSize*(nts*comp+tNow)+ipxpy] - phi1[totSize*(nts*comp+tNow)+ipx] - phi1[totSize*(nts*comp+tNow)+ipy] + phi1[totSize*(nts*comp+tNow)+i];
+		            coeff2[comp] = (y+dy)*(phi1[totSize*(nts*comp+tNow)+ipx] - phi1[totSize*(nts*comp+tNow)+i]) + y*(phi1[totSize*(nts*comp+tNow)+ipy] - phi1[totSize*(nts*comp+tNow)+ipxpy]);
+		            coeff3[comp] = (x+dx)*(phi1[totSize*(nts*comp+tNow)+ipy] - phi1[totSize*(nts*comp+tNow)+i]) + x*(phi1[totSize*(nts*comp+tNow)+ipx] - phi1[totSize*(nts*comp+tNow)+ipxpy]);
+		            coeff4[comp] = (x+dx)*( (y+dy)*phi1[totSize*(nts*comp+tNow)+i] - y*phi1[totSize*(nts*comp+tNow)+ipy] ) - x*( (y+dy)*phi1[totSize*(nts*comp+tNow)+ipx] - y*phi1[totSize*(nts*comp+tNow)+ipxpy] );
 
 		        }
 
@@ -642,10 +700,10 @@ int main(int argc, char ** argv){
 
 	            for(comp=0;comp<2;comp++){
 
-	                coeff1[comp] = phi[totSize*(nts*comp+tNow)+ipxpz] - phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipz] + phi[totSize*(nts*comp+tNow)+i];
-	                coeff2[comp] = (z+dz)*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+i]) + z*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+ipxpz]);
-	                coeff3[comp] = (x+dx)*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+i]) + x*(phi[totSize*(nts*comp+tNow)+ipx] - phi[totSize*(nts*comp+tNow)+ipxpz]);
-	                coeff4[comp] = (x+dx)*( (z+dz)*phi[totSize*(nts*comp+tNow)+i] - z*phi[totSize*(nts*comp+tNow)+ipz] ) - x*( (z+dz)*phi[totSize*(nts*comp+tNow)+ipx] - z*phi[totSize*(nts*comp+tNow)+ipxpz] );
+	                coeff1[comp] = phi1[totSize*(nts*comp+tNow)+ipxpz] - phi1[totSize*(nts*comp+tNow)+ipx] - phi1[totSize*(nts*comp+tNow)+ipz] + phi1[totSize*(nts*comp+tNow)+i];
+	                coeff2[comp] = (z+dz)*(phi1[totSize*(nts*comp+tNow)+ipx] - phi1[totSize*(nts*comp+tNow)+i]) + z*(phi1[totSize*(nts*comp+tNow)+ipz] - phi1[totSize*(nts*comp+tNow)+ipxpz]);
+	                coeff3[comp] = (x+dx)*(phi1[totSize*(nts*comp+tNow)+ipz] - phi1[totSize*(nts*comp+tNow)+i]) + x*(phi1[totSize*(nts*comp+tNow)+ipx] - phi1[totSize*(nts*comp+tNow)+ipxpz]);
+	                coeff4[comp] = (x+dx)*( (z+dz)*phi1[totSize*(nts*comp+tNow)+i] - z*phi1[totSize*(nts*comp+tNow)+ipz] ) - x*( (z+dz)*phi1[totSize*(nts*comp+tNow)+ipx] - z*phi1[totSize*(nts*comp+tNow)+ipxpz] );
 
 	            }
 
@@ -717,10 +775,10 @@ int main(int argc, char ** argv){
 
 	            for(comp=0;comp<2;comp++){
 
-	                coeff1[comp] = phi[totSize*(nts*comp+tNow)+ipypz] - phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+ipz] + phi[totSize*(nts*comp+tNow)+i];
-	                coeff2[comp] = (z+dz)*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+i]) + z*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+ipypz]);
-	                coeff3[comp] = (y+dy)*(phi[totSize*(nts*comp+tNow)+ipz] - phi[totSize*(nts*comp+tNow)+i]) + y*(phi[totSize*(nts*comp+tNow)+ipy] - phi[totSize*(nts*comp+tNow)+ipypz]);
-	                coeff4[comp] = (y+dy)*( (z+dz)*phi[totSize*(nts*comp+tNow)+i] - z*phi[totSize*(nts*comp+tNow)+ipz] ) - y*( (z+dz)*phi[totSize*(nts*comp+tNow)+ipy] - z*phi[totSize*(nts*comp+tNow)+ipypz] );
+	                coeff1[comp] = phi1[totSize*(nts*comp+tNow)+ipypz] - phi1[totSize*(nts*comp+tNow)+ipy] - phi1[totSize*(nts*comp+tNow)+ipz] + phi1[totSize*(nts*comp+tNow)+i];
+	                coeff2[comp] = (z+dz)*(phi1[totSize*(nts*comp+tNow)+ipy] - phi1[totSize*(nts*comp+tNow)+i]) + z*(phi1[totSize*(nts*comp+tNow)+ipz] - phi1[totSize*(nts*comp+tNow)+ipypz]);
+	                coeff3[comp] = (y+dy)*(phi1[totSize*(nts*comp+tNow)+ipz] - phi1[totSize*(nts*comp+tNow)+i]) + y*(phi1[totSize*(nts*comp+tNow)+ipy] - phi1[totSize*(nts*comp+tNow)+ipypz]);
+	                coeff4[comp] = (y+dy)*( (z+dz)*phi1[totSize*(nts*comp+tNow)+i] - z*phi1[totSize*(nts*comp+tNow)+ipz] ) - y*( (z+dz)*phi1[totSize*(nts*comp+tNow)+ipy] - z*phi1[totSize*(nts*comp+tNow)+ipypz] );
 
 	            }
 
@@ -802,7 +860,7 @@ int main(int argc, char ** argv){
 
 	        	ss.str(string());
 	        	ss << gifStringPosFrame;
-	        	string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + outTag + "_nx" + to_string(nx) + "_seed" + to_string(seed) + "_" + ss.str() + ".txt";
+	        	string gifStringPosDataPath = dir_path + "/GifData/gifStringPosData_" + outTag + "_nx" + to_string(nx) + "_q1" + to_string(q1) + "_seed" + to_string(seed) + "_" + ss.str() + ".txt";
 	            ofstream gifStringPosData (gifStringPosDataPath.c_str());
 	            gifStringPosFrame+=1;
 
@@ -887,7 +945,7 @@ int main(int argc, char ** argv){
 
 	    }
 
-	    // If calculating the energy, add it all up and output to text
+        // If calculating the energy, add it all up and output to text
         if(calcEnergy){
 
             if(rank==0){
@@ -924,11 +982,18 @@ int main(int argc, char ** argv){
 
         for(comp=0;comp<2;comp++){ 
 
-        	MPI_Sendrecv(&phi[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
-        				 &phi[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+        	MPI_Sendrecv(&phi1[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
+        				 &phi1[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
 
-        	MPI_Sendrecv(&phi[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
-        				 &phi[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+        	MPI_Sendrecv(&phi1[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+        				 &phi1[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+
+
+            MPI_Sendrecv(&phi2[totSize*(nts*comp+tPast)+haloSize],haloSize,MPI_DOUBLE,(rank-1+size)%size,0, // Send this
+                         &phi2[totSize*(nts*comp+tPast)+coreSize+haloSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE); // Receive this
+
+            MPI_Sendrecv(&phi2[totSize*(nts*comp+tPast)+coreSize],haloSize,MPI_DOUBLE,(rank+1)%size,0,
+                         &phi2[totSize*(nts*comp+tPast)],haloSize,MPI_DOUBLE,(rank-1+size)%size,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
 
         }
 

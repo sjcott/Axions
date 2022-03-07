@@ -12,6 +12,8 @@ VAR1="$(dirname "$(readlink -f "$0")")"
 
 scp $VAR1/mpi_evolution.cpp sjcott@centaurus.jb.man.ac.uk:/home/sjcott/Documents/Axions/mpi_evolution.cpp
 
+scp $VAR1/moore_mpi_evolution.cpp sjcott@centaurus.jb.man.ac.uk:/home/sjcott/Documents/Axions/moore_mpi_evolution.cpp
+
 #scp $VAR1/Data/SOR_Fields.txt sjcott@centaurus.jb.man.ac.uk:/home/sjcott/Documents/Axions/Data/SOR_Fields.txt
 
 #scp $VAR1/ic_w_evolution.cpp sjcott@centaurus.jb.man.ac.uk:/home/sjcott/Documents/Axions/ic_w_evolution.cpp
